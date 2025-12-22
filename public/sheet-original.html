@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Cheat Sheet v3</title>
+    <style>
+        /* EXM TWEAKS BLUE THEME */
+        :root {
+            --bg-color: #050505;
+            --card-bg: #111116;
+            --text-main: #e4e4e7;
+            --text-muted: #a1a1aa;
+            --accent-primary: #3b82f6; /* Bright Blue */
+            --accent-hover: #2563eb;
+            --accent-glow: rgba(59, 130, 246, 0.2);
+            --border-color: #27272a;
+            --code-bg: #18181b;
+            --danger: #ef4444;
+            --warning: #eab308;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Inter, Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* LAYOUT */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* HEADER */
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            background: linear-gradient(90deg, #fff, var(--accent-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            filter: drop-shadow(0 0 15px var(--accent-glow));
+        }
+
+        h2 {
+            color: var(--accent-primary);
+            border-left: 5px solid var(--accent-primary);
+            padding-left: 20px;
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, var(--accent-glow), transparent);
+            padding-top: 8px;
+            padding-bottom: 8px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        h3 {
+            color: #fff;
+            margin-top: 30px;
+            font-size: 1.3rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            display: inline-block;
+        }
+
+        h4 {
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+
+        /* SCROLL ANIMATION STYLES */
+        /* This class makes elements invisible and pushed down initially */
+        .hidden-section {
+            opacity: 0;
+            transform: translateY(80px); 
+            transition: all 0.8s ease-out; /* Smooth transition duration */
+        }
+
+        /* This class is added by JS to show the element */
+        .show-section {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* CARDS */
+        .section-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 35px;
+            margin-bottom: 60px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        /* CONTENT STYLING */
+        p {
+            color: var(--text-muted);
+            margin-bottom: 15px;
+        }
+
+        strong {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        ul, ol {
+            color: var(--text-muted);
+            padding-left: 25px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: var(--accent-primary);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.3s;
+        }
+        
+        a:hover {
+            border-bottom: 1px solid var(--accent-primary);
+        }
+
+        /* CODE BLOCKS */
+        .code-block {
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent-primary);
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            color: #93c5fd;
+            overflow-x: auto;
+            border-radius: 6px;
+            margin: 15px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+        }
+
+        /* ALERTS */
+        .alert-danger {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid var(--danger);
+            color: #fca5a5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 25px 0;
+            font-weight: bold;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* TABLES */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 20px;
+            background: var(--code-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 18px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+        
+        tr:hover td {
+            background-color: rgba(255,255,255,0.02);
+        }
+
+        footer {
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 80px;
+            padding-bottom: 40px;
+            font-size: 0.9rem;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header class="hidden-section">
+        <h1>Staff Cheat Sheet <span style="font-size: 0.4em; vertical-align: top; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 2px 6px; border-radius: 4px; margin-left: 10px;">v3</span></h1>
+        <p style="margin-top: 10px; letter-spacing: 1px; color: var(--accent-primary);">OFFICIAL INTERNAL DOCUMENTATION</p>
+    </header>
+
+    <div class="section-card hidden-section">
+        <h2>Ticket Handling</h2>
+        
+        <h3>No response from user:</h3>
+        <ul>
+            <li>If a user hasn’t replied within <strong>12+ hours</strong>, ping them.</li>
+            <li>If there is still no reply after <strong>4 more hours</strong>, ping one final time.</li>
+            <li>If there is still no answer after <strong>4 more hours</strong>, proceed to <strong>close the ticket</strong>.</li>
+            <li>If the ticket seems handled, you can issue a <code>/requestclose</code> through chat, and usually members tend to not respond to it, if you do not get a response within 6 hours you can ping them again, and if they don’t respond in another 6-8 hours you can close the ticket.</li>
+            <li>Closing the ticket automatically gives a reason saying the ticket was handled, so you don’t need to give a reason.</li>
+            <li>If a ticket seems like an issue that isn’t related to technical support, you can use <code>/ticket transfer (the needed panel) Move:yes</code> (Ping a needed staff member before you transfer the ticket)</li>
+            <li>for key related issues, such as a key being invalid, ping the someone that is an admin or higher.</li>
+        </ul>
+
+        <h3>User spamming staff:</h3>
+        <ul>
+            <li>If a user spam-pings staff <strong>immediately after opening a ticket or after some time of no response</strong>, first <strong>warn them to stop</strong> and assure them that staff will help soon (or assist them yourself).</li>
+            <li>If they continue to spam, <strong>you may time them out for an hour or less</strong> depending on the severity of the mass mentioning</li>
+        </ul>
+
+        <h3>Professionalism:</h3>
+        <ul>
+            <li>Always maintain professional language and conduct when handling tickets.</li>
+            <li>Do not send unneeded gif’s or photos while handling a ticket.</li>
+        </ul>
+    </div>
+
+    <div class="section-card hidden-section">
+        <h2>Legacy EXM Premium Technical Issues</h2>
+        <p>Ask for <strong>error codes, system specs, screenshots</strong>, or any relevant information.<br>
+        If unsure about a fix, <strong>@ another staff member</strong> for guidance.</p>
+
+        <h3>Xbox Issues</h3>
+        <p>Check all required Xbox services:</p>
+        <ul>
+            <li>Xbox Live Auth Manager</li>
+            <li>Xbox Live Game Save</li>
+            <li>Xbox Live Networking Service</li>
+            <li>Gaming Services</li>
+        </ul>
+
+        <p>If issues persist:</p>
+        <ul>
+            <li>Revert network tweaks</li>
+            <li>Reinstall Microsoft Edge</li>
+            <li>Reinstall Required Xbox Services</li>
+            <li>Turn off antivirus</li>
+        </ul>
+        
+        <h4>Xbox Commands:</h4>
+        <div class="code-block">reg add "HKLM\SYSTEM\CurrentControlSet\Services\XboxGipSvc" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\XblAuthManager" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\XblGameSave" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\XboxNetApiSvc" /v Start /t REGDWORD /d 3 /f</div>
+
+        <h4>PowerShell Reinstall:</h4>
+        <div class="code-block">'Microsoft.XboxApp','Microsoft.XboxGamingOverlay','Microsoft.XboxGameOverlay','Microsoft.XboxLiveGames','Microsoft.XboxIdentityProvider','Microsoft.XboxSpeechToTextOverlay','Microsoft.Xbox.TCUI','Microsoft.GamingApp','Microsoft.GamingServices' |
+ForEach-Object {
+Get-AppxPackage -AllUsers $ | ForEach-Object {
+Add-AppxPackage -Register "$($_.InstallLocation)\appxmanifest.xml" -DisableDevelopmentMode   	}     }</div>
+
+        <h3>FPS Drops/Stutters</h3>
+        <p>This is usually caused by:</p>
+        <ul>
+            <li>Shader cache needing to be rebuilt (AMD/NVIDIA).</li>
+            <li>High temperatures.</li>
+            <li>Power Throttling.</li>
+        </ul>
+        <p>If the user has a X3D Chip:</p>
+        <ul>
+            <li>The utility can cause stability issues to X3D Chips.</li>
+            <li>Instruct the user to: Use a system restore point. Avoid CPU tweak options in the utility.</li>
+        </ul>
+
+        <h3>Network Issues After the Tweaks</h3>
+        <p>Network tweaks can sometimes be hit or miss. If the user reports connectivity problems:</p>
+        <ul>
+            <li>Option A: Walk them through a Network Reset in Windows Settings -> Network & Internet -> Advanced Network Settings -> Network Reset.</li>
+        </ul>
+
+        <h3>Bluetooth and WiFi Fix</h3>
+        <p>Use the Fixes in the Support server to support the user</p>
+
+        <h3>Minecraft Installation Issues</h3>
+        <ul>
+            <li>Direct the user to the official download: https://www.minecraft.net/en-us/download</li>
+            <li>If the <strong>launcher fails</strong>, have them install <strong>Windows Legacy Launcher</strong>.</li>
+            <li>If they still have login issues, apply the <strong>Xbox gaming Fixes</strong> (see Xbox Issues section).</li>
+        </ul>
+    
+        <h3>Restore Point Fix</h3>
+        <ul>
+            <li>Make sure <strong>Volume Shadow Copy</strong> service is enabled and running.</li>
+            <li>Go to <strong>System Protection</strong> -> Ensure its enabled, and <strong>Max Usage</strong> is set to around 10%.</li>
+            <li>If it still doesn’t work: Boot into <strong>Safe Mode</strong> and try the restore point from there.</li>
+            <li>If restore still fails: Guide the user to perform a <strong>Clean Install of Windows</strong>.</li>
+        </ul>
+
+        <h3>Peripherals Not Working</h3>
+        <p>If caused by <strong>hidusbf</strong>:</p>
+        <ul>
+            <li>Try a <strong>System Restore Point</strong> first.</li>
+            <li>If restore is not possible: Unplug the affected device. Open <strong>Device Manager</strong> → Uninstall the device. Uninstall any USB ports with a <strong>yellow warning symbol</strong>. Restart the PC → Plug the device back in.</li>
+        </ul>
+        <p>If caused by <strong>Tweaking Utility</strong>:</p>
+        <ul>
+            <li>Attempt a <strong>System Restore Point</strong>.</li>
+            <li>If normal restore doesn’t work: Boot into <strong>Advanced Startup</strong> → Run restore point from there.</li>
+            <li>After restoring, advise the user to <strong>skip KBM (keyboard/mouse) tweaks</strong>.</li>
+        </ul>
+        <h4>Additional Fixes</h4>
+        <ul>
+            <li>Try plugging devices into a different USB port (rear I/O is most reliable).</li>
+            <li>Disable <strong>USB selective suspend</strong>: Control Panel → Power Options → Advanced Settings → USB Settings → Disabled.</li>
+            <li>For stubborn cases: If still failing, guide the user to perform a <strong>Clean Boot</strong> to rule out third- party conflicts.</li>
+        </ul>
+
+        <h3>Display Problems</h3>
+        <ul>
+            <li><strong>Revert GPU Tweaks:</strong> Undo any GPU tweaks and restart.</li>
+            <li><strong>Reinstall GPU Driver:</strong> Use DDU in Safe Mode for clean removal. Reinstall latest driver from official site.</li>
+            <li><strong>Restore Point / Revert:</strong> If still broken, use a System Restore Point</li>
+        </ul>
+
+        <h3>FiveM Fix</h3>
+        <ul>
+            <li>If the user has issues after tweaks: Run the command: <code>netsh int ip set global mldlevel=all</code></li>
+            <li>If the issue persists: Perform a <strong>Network Reset</strong> (Settings → Network → Advanced → Network Reset) Or use the <strong>Revert</strong> option in the utility.</li>
+        </ul>
+
+        <h3>Blurry / Rigid Text After Tweak</h3>
+        <ul>
+            <li>Press <strong>Win + R</strong>, type: <code>SystemPropertiesPerformance</code></li>
+            <li>Hit <strong>Enter</strong> → In <strong>Visual Effects</strong>: Select <strong>Adjust for best appearance</strong> or Enable <strong>Smooth edges of screen fonts</strong>.</li>
+            <li>Click <strong>Apply</strong> → <strong>OK</strong>.</li>
+            <li><strong>Restart the PC</strong>.</li>
+        </ul>
+
+        <h3>Powerplan Importing Issue</h3>
+        <ul>
+            <li>Open CMD (Command Prompt) as admin or ask Tezzer for a bat file.</li>
+            <li><code>powercfg /l</code> After that, use this command to apply the exm powerplan (usually the one with no name).</li>
+            <li><code>powercfg /setactive &lt;GUID&gt;</code></li>
+            <li>If this fix doesn’t work, use this command -> restart pc and try again.</li>
+            <li><code>reg add "HKLM\SYSTEM\CurrentControlSet\Control\Power" /v PlatformAoAcOverride /t REG_DWORD /d 0 /f”</code></li>
+        </ul>
+
+        <h3>Audio Problems</h3>
+        <ul>
+            <li>Guide the user to <strong>reinstall their audio driver</strong> to fix most issues.</li>
+            <li>If the problem is caused by <strong>setting game priority to High</strong>: Inform the user that this behaviour is <strong>normal</strong> if they have a <strong>low-core CPU</strong>.</li>
+        </ul>
+
+        <h3>High CPU / RAM Usage</h3>
+        <ul>
+            <li>This <strong>can be normal after using tweaks</strong>, but may also result from: An <strong>unstable system</strong> or <strong>Insufficient system specs</strong>.</li>
+            <li>Recommended steps for the user: Check <strong>Event Viewer</strong> for failures or warnings. If issues persist -> Use a <strong>System Restore Point</strong> to revert changes.</li>
+        </ul>
+
+        <h3>Sleep / Hibernation</h3>
+        <ul>
+            <li>Restore default power schemes: <code>powercfg –restoredefaultschemes</code></li>
+        </ul>
+
+        <h3>Windows Updates</h3>
+        <ul>
+            <li>Enable updates using <strong>Windows Update Blocker</strong>.</li>
+            <li>If not using the blocker, guide the user to <strong>enable required services</strong>:</li>
+        </ul>
+        <div class="code-block">sc config wuauserv start= auto
+sc config bits start= auto
+sc config cryptsvc start= auto
+sc start wuauserv
+sc start bits
+sc start cryptsvc</div>
+        <p>Restart the PC after enabling services to apply changes.</p>
+
+        <h3>Slow Boots</h3>
+        <ul>
+            <li>Normal after running the utility because <strong>Fast Boot is disabled</strong>.</li>
+            <li>The computer fully shuts down and starts all services/apps during boot. No additional action is needed unless other issues appear.</li>
+        </ul>
+    </div>
+
+    <div class="section-card hidden-section">
+        <h2>2.0 Fixes + Additional Fixes</h2>
+        
+        <h3>Valorant Fix</h3>
+        <p>Run this in cmd or ask Tezzer for a bat file:</p>
+        <div class="code-block">reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v "EnableVirtualizationBasedSecurity" /t REG_DWORD /d 1 /f >nul
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v "RequirePlatformSecurityFeatures" /t REG_DWORD /d 1 /f >nul
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" /v "Enabled" /t REG_DWORD /d 1 /f >nul
+bcdedit /set hypervisorlaunchtype auto
+bcdedit /deletevalue disableelamdrivers reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationOptions" /t REG_BINARY /d "00000000000000000000000000000000" /f >nul
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationAuditOptions" /t REG_BINARY /d "00000000000000000000000000000000" /f >nul</div>
+
+        <h3>Time Synchronization Failed Fix</h3>
+        <ul>
+            <li>Press <strong>Windows Key + R</strong>, type <code>timedate.cpl</code> , and press <strong>Enter</strong>.</li>
+            <li>Go to the <strong>Internet Time</strong> tab, then click <strong>Change settings...</strong></li>
+            <li>Check the "Synchronize" box, then <strong>switch the Server</strong> (e.g., from <code>time.windows.com</code> to <code>time.nist.gov</code>).</li>
+            <li>Click <strong>Update Now</strong>.</li>
+        </ul>
+
+        <h3>Clipboard Fix</h3>
+        <div class="code-block">reg add "HKLM\SYSTEM\CurrentControlSet\Services\cbdhsvc" /v Start /t REG_DWORD /d 2 /f
+reg add "HKLM\SOFTWARE\Microsoft\Clipboard" /v EnableClipboardHistory /t REG_DWORD /d 1 /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v AllowClipboardHistory /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v AllowCrossDeviceClipboard /f</div>
+
+        <h3>Nvidia App Fix</h3>
+        <div class="code-block">reg add "HKLM\SYSTEM\CurrentControlSet\Services\cbdhsvc" /v Start /t REG_DWORD /d 2 /f
+reg add "HKLM\SOFTWARE\Microsoft\Clipboard" /v EnableClipboardHistory /t REG_DWORD /d 1 /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v AllowClipboardHistory /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" /v AllowCrossDeviceClipboard /f</div>
+
+        <h3>Microsoft Store Fix</h3>
+        <p>Open CMD as admin and run these:</p>
+        <div class="code-block">reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v AUOptions /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoRebootWithLoggedOnUsers /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v ExcludeWUDriversInQualityUpdate /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\wuauserv" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\ClipSVC" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\AppXSvc" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\LicenseManager"/v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\InstallService"/v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\wuauserv" /v Start /t REG_DWORD /d 3 /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v RemoveWindowsStore /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v DisableStoreApps /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\ClipSVC" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\AppXSvc" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\LicenseManager"/v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\InstallService"/v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\wuauserv" /v Start /t REG_DWORD /d 3 /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v RemoveWindowsStore /f
+reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v DisableStoreApps /f</div>
+
+        <h3>Bluetooth Fix</h3>
+        <p>Open CMD as admin and run these:</p>
+        <div class="code-block">reg add "HKLM\SYSTEM\CurrentControlSet\Services\bthserv" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\BluetoothUserService" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\BTAGService" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\BthAvctpSvc" /v Start /t REG_DWORD /d 3 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\BthHFEnum" /v Start /t REG_DWORD /d 3 /f</div>
+
+        <h3>Hz resets to 60 after restart fix</h3>
+        <p>Run this in cmd as admin: <code>sc config DispBrokerDesktopSvc start=auto</code></p>
+
+        <h3>Slow Download/Upload Speeds after tweaks</h3>
+        <ul>
+            <li>If its a 2.0 premium user tell them to use the normal bufferbloat profile in the exm app.</li>
+            <li>Free User fix: Run this in cmd as admin: <code>netsh int tcp set global autotuninglevel=normal</code></li>
+        </ul>
+
+        <h3>AMD Adrenaline App Not Opening</h3>
+        <ul>
+            <li>Run the AMD Cleanup Utility.</li>
+            <li>Reinstall Drivers through the Official AMD Website</li>
+        </ul>
+    </div>
+
+    <div class="section-card hidden-section">
+        <h2>General Troubleshooting / Utility Notes</h2>
+        <ul>
+            <li>If the user is on <strong>Windows 11 25H2</strong>, inform them that the utility works best on 23h2/24h2 and windows 10 22h2.</li>
+            <li>If none of your fixes work: <strong>@ another staff member</strong> for assistance. Or advise the user to perform a <strong>Clean Install of Windows</strong>.</li>
+            <li>For any other issues (whether caused by the utility or not): Search for solutions on <strong>YouTube</strong>, <strong>Google</strong>, or <strong>ChatGPT</strong> to guide the user further.</li>
+            <li>If you have any common issues to add to this then message/@Tezzer.</li>
+        </ul>
+    </div>
+
+    <div class="section-card hidden-section">
+        <h2>Legacy Premium (Key & Purchasing)</h2>
+        <div class="alert-danger">
+            (LOWER STAFF DO NOT HAVE ACCESS TO KEY TICKETS OR PURCHASE TICKETS, SO ANYONE UNDER SR MODERATOR CAN SKIP THIS TILL THE 11TH PAGE NOW)
+        </div>
+        <p>This is for Legacy Premium</p>
+
+        <h3>Key Issues</h3>
+        <p><strong>Invalid Key:</strong></p>
+        <ul>
+            <li>Ask if the user has <strong>spoofed</strong> or <strong>changed motherboards</strong>:</li>
+            <li>If yes -> Direct them to the <strong>New Key channel</strong>.</li>
+            <li>If no -> Use:</li>
+            <li><code>/hwid 1</code> -> Windows 10</li>
+            <li><code>/hwid 2</code> -> Windows 11</li>
+            <li>After receiving their HWID and key → Ping a <strong>higher staff member</strong>.</li>
+        </ul>
+
+        <p><strong>Blacklisted:</strong></p>
+        <ul>
+            <li>Ask the user for their key -> Ping a <strong>higher staff member</strong>.</li>
+        </ul>
+
+        <p><strong>Missing Key:</strong></p>
+        <ul>
+            <li>Ask for their <strong>email</strong> -> Ping a staff member with <strong>database access</strong>.</li>
+        </ul>
+
+        <p><strong>Proof of ownership:</strong></p>
+        <ul>
+            <li>Receipt</li>
+            <li>Ping an <strong>Admin+</strong> to swap roles.</li>
+        </ul>
+
+        <h3>Cannot Verify:</h3>
+        <ul>
+            <li>If this is their <strong>only account</strong>: Ask for email and receipt → Ping <strong>Admin+</strong> to verify manually.</li>
+            <li>If it's not their <strong>only account</strong>: Follow Old Account Lost/Termed Steps.</li>
+        </ul>
+
+        <h3>Purchasing Using Unsupported Payment:</h3>
+        <ul>
+            <li>Crypto → Direct to <strong>EXM’s DMs</strong>.</li>
+            <li>Other unsupported payments (Paysafe, etc.) → Ping a <strong>trusted seller staff member</strong> to assist.</li>
+        </ul>
+
+        <h3>Utility Issues</h3>
+        <ul>
+            <li>If the user <strong>cannot open the utility</strong>, follow the guide: Utility Step By Step Troubleshooting</li>
+            <li>If the guide does not resolve the issue -> Send ticket to <strong>Django</strong>.</li>
+            <li>For bugs in the utility: Confirm the bug is real. Either <strong>report it yourself</strong> or <strong>transfer to a bug report ticket</strong> for developers.</li>
+        </ul>
+
+        <h3>Refund Policy</h3>
+        <ul>
+            <li>Ensure the user has: Issues with the utility, Purchased within <strong>7 days</strong>.</li>
+            <li>Use the <code>/refund</code> command and guide them through it.</li>
+            <li>Verify that <strong>submitted videos are up to standard</strong>.</li>
+            <li>Send the ticket to <strong>EXM</strong> for further processing.</li>
+        </ul>
+    </div>
+
+    <div class="section-card hidden-section">
+        <h2>2.0 Tickets</h2>
+        <h3>Technical Support Tickets</h3>
+        <ul>
+            <li>Try to solve the tickets to the best of your abilities using the fixes above or doing research and finding your own fixes for users.</li>
+            <li>If you see a user opening the wrong ticket, please transfer the ticket to the correct panel to have the correct attention it needs whether that would be an app bug or a tweak related ticket.</li>
+        </ul>
+    </div>
+
+    <div class="section-card hidden-section">
+        <h2>Moderating Chat</h2>
+        
+        <h3>Procedure for Trial Support</h3>
+        <ul>
+            <li>If you need to <strong>ban/kick</strong> a user: Take <strong>screenshots for proof</strong>.</li>
+            <li>Copy the <strong>user ID</strong> and send it to <strong>#punishment-proof</strong>.</li>
+            <li>If the bot has already logged it, which you can check in user logs; you do not need to log it into punishment proof.</li>
+        </ul>
+
+        <h3>Using Bleed Bot:</h3>
+        <div class="code-block">*timeout (user id) (length) (reason)
+*kick (user id) (reason)
+*ban (user id) (reason)</div>
+
+        <h3>Standard Punishments:</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Offense</th>
+                    <th>Punishment</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Hard R</td>
+                    <td style="color: var(--danger);">Permanent Ban</td>
+                </tr>
+                <tr>
+                    <td>N Word</td>
+                    <td>2 Week Timeout</td>
+                </tr>
+                <tr>
+                    <td>R Slur</td>
+                    <td>1 Week Timeout</td>
+                </tr>
+                <tr>
+                    <td>Racism / Discriminatory Language</td>
+                    <td style="color: var(--danger);">Permanent Ban</td>
+                </tr>
+                <tr>
+                    <td>Asking / Giving out Premium Utility for free</td>
+                    <td style="color: var(--danger);">Permanent Ban</td>
+                </tr>
+                <tr>
+                    <td>Doxxing / DDoS (even joking)</td>
+                    <td style="color: var(--danger);">Permanent Ban</td>
+                </tr>
+                <tr>
+                    <td>Spreading Malicious Links / Files</td>
+                    <td style="color: var(--danger);">Permanent Ban</td>
+                </tr>
+                <tr>
+                    <td>Advertising / Self Promo</td>
+                    <td style="color: var(--danger);">Permanent Ban</td>
+                </tr>
+                <tr>
+                    <td>Being rude / starting arguments</td>
+                    <td>Punishment depends on severity</td>
+                </tr>
+                <tr>
+                    <td>Chat Spam</td>
+                    <td>4h Timeout (8h if excessive)</td>
+                </tr>
+                <tr>
+                    <td>Scam Accounts / Hacked Accounts</td>
+                    <td>Kick + delete messages if needed</td>
+                </tr>
+                <tr>
+                    <td>Starting Drama about other tweakers</td>
+                    <td>24h Timeout</td>
+                </tr>
+            </tbody>
+        </table>
+        <p style="margin-top: 20px; text-align: center; color: var(--accent-primary);"><em>"This goes for all staff members, NO ARGUING. Avoid talking about unneeded topics in tickets, avoid intervening in other staff members' tickets unless you have information that would be useful."</em></p>
+    </div>
+
+    <footer class="hidden-section">
+        <p>credits to tezzer</p>
+    </footer>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add("show-section");
+                }
+            });
+        }, {
+            threshold: 0.1 
+        });
+
+        const hiddenSections = document.querySelectorAll(".hidden-section");
+        hiddenSections.forEach((el) => observer.observe(el));
+    });
+</script>
+
+</body>
+</html>
