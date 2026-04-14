@@ -2,9 +2,9 @@
 
 ## Developer Reference Document — Open-Source Benchmarking Tools & Architecture
 
-**Version:** 1.0
+**Version:** 2.0 (Expanded Deep Research Edition)
 **Date:** April 2026
-**Purpose:** Comprehensive technical reference for implementing an integrated benchmarking suite into the Mixiee tuning utility. This document covers open-source tools, libraries, APIs, integration strategies, and architectural recommendations for building one of the most accurate and reliable benchmarking experiences — while keeping resource consumption minimal.
+**Purpose:** Comprehensive technical reference for implementing an integrated benchmarking suite into the Mixiee tuning utility. This document covers 31 open-source tools, libraries, APIs, integration strategies, and architectural recommendations for building one of the most accurate and reliable benchmarking experiences — while keeping resource consumption minimal.
 
 ---
 
@@ -13,538 +13,760 @@
 1. [Executive Summary](#1-executive-summary)
 2. [Architecture Overview](#2-architecture-overview)
 3. [CPU Benchmarking](#3-cpu-benchmarking)
-4. [GPU Benchmarking](#4-gpu-benchmarking)
-5. [Disk / Storage Benchmarking](#5-disk--storage-benchmarking)
-6. [Network Benchmarking](#6-network-benchmarking)
-7. [Latency Benchmarking (System / DPC / Input)](#7-latency-benchmarking-system--dpc--input)
-8. [Hardware Monitoring & Telemetry](#8-hardware-monitoring--telemetry)
-9. [Cross-Cutting: Phoronix Test Suite (Meta-Framework)](#9-cross-cutting-phoronix-test-suite-meta-framework)
-10. [Comparison Matrix](#10-comparison-matrix)
-11. [Recommended Implementation Stack](#11-recommended-implementation-stack)
-12. [Before/After Tuning — Scoring Strategy](#12-beforeafter-tuning--scoring-strategy)
-13. [Resource Consumption Guidelines](#13-resource-consumption-guidelines)
-14. [Licensing Summary](#14-licensing-summary)
-15. [References & Links](#15-references--links)
+4. [Memory Bandwidth & Latency Benchmarking](#4-memory-bandwidth--latency-benchmarking)
+5. [GPU Benchmarking](#5-gpu-benchmarking)
+6. [Disk / Storage Benchmarking](#6-disk--storage-benchmarking)
+7. [Network Benchmarking](#7-network-benchmarking)
+8. [System Latency Benchmarking (DPC / ISR / Scheduling)](#8-system-latency-benchmarking-dpc--isr--scheduling)
+9. [Hardware Monitoring & Telemetry](#9-hardware-monitoring--telemetry)
+10. [Cross-Cutting Meta-Frameworks](#10-cross-cutting-meta-frameworks)
+11. [Full Tool Comparison Matrix](#11-full-tool-comparison-matrix)
+12. [Recommended Implementation Stack](#12-recommended-implementation-stack)
+13. [Before/After Tuning — Scoring Strategy](#13-beforeafter-tuning--scoring-strategy)
+14. [Resource Consumption Guidelines](#14-resource-consumption-guidelines)
+15. [Licensing Summary](#15-licensing-summary)
+16. [References & Links](#16-references--links)
 
 ---
 
 ## 1. Executive Summary
 
-Mixiee aims to become a top-tier benchmarking app alongside its existing system-tuning capabilities. The goal is to accurately measure hardware performance across **CPU, GPU, Disk, Network, and Latency** — so users can see the real impact of tuning tweaks on their devices.
+Mixiee aims to become a top-tier benchmarking app alongside its existing system-tuning capabilities. The goal is to accurately measure hardware performance across **CPU, GPU, Memory, Disk, Network, and System Latency** — so users can see the real impact of tuning tweaks on their devices.
 
-This guide catalogs the best open-source benchmarking tools available, evaluates their accuracy, resource usage, platform support, and license compatibility, and provides a clear integration roadmap for the development team.
+This guide catalogs **31 open-source benchmarking tools** across 6 categories, evaluates their accuracy, resource usage, platform support, and license compatibility, and provides a clear integration roadmap.
 
 ### Key Design Principles
 
-- **Accuracy First:** Use tools trusted by the industry (fio, iperf3, DiskSpd, vkpeak, etc.)
-- **Low Resource Consumption:** Benchmarks should be short, targeted, and cleanup after themselves
-- **Before/After Comparison:** Every benchmark must produce a numeric score that can be compared pre- and post-tuning
-- **Windows-First:** Primary target is Windows 10/11 (with Linux as a secondary target)
-- **Open Source:** All core tools must be open-source with permissive or compatible licenses
-- **Modular:** Each benchmark category should be an independent module that can run solo or as part of a full suite
+- **Accuracy First:** Use tools trusted by the industry — fio, DiskSpd, iperf3, vkpeak, Intel PCM, lmbench, STREAM, PresentMon
+- **Low Resource Consumption:** Benchmarks run in minutes, configurable depth, clean up automatically
+- **Before/After Comparison:** Every benchmark produces a numeric score comparable pre- and post-tuning
+- **Windows-First:** Primary target is Windows 10/11 (Linux as secondary)
+- **Open Source:** All core tools are open-source with permissive or compatible licenses
+- **Modular:** Each benchmark category is an independent module — run solo or as a full suite
+- **Vendor-Neutral:** Use Vulkan and cross-vendor tools wherever possible
+
+### What Is New In Version 2.0
+
+Added 12 new tools not in v1.0:
+- **Intel PCM** — CPU hardware counters (IPC, cache miss rates, per-channel memory BW, power)
+- **STREAM** — The de-facto standard memory bandwidth benchmark (Triad)
+- **lmbench** — System micro-latency suite (cache levels, context switch, pipe latency)
+- **tinymembench** — Peak memory bandwidth + random access latency
+- **Microsoft Latte** — Nanosecond TCP/UDP latency on Windows
+- **BenchmarkDotNet** — .NET benchmarking framework (used by .NET Runtime team)
+- **Network-Performance-Visualization** — Before/after network comparison in Excel
+- **System Informer** — Windows kernel driver/DPC/ISR monitoring
+- **glmark2** — OpenGL rendering benchmark (Linux)
+- **OpenSSL speed** — Cryptographic CPU throughput (AES-NI, SHA-NI)
+- **Intel ISA-L** — Storage acceleration benchmarks
+- **ctsTraffic** — Network reliability and data integrity validation
+
+Added new deep technical sections:
+- PresentMon SDK architecture and integration guide
+- ETW/DPC latency implementation with code samples
+- Windows timer resolution API
+- Thread scheduling latency custom test
+- STREAM license analysis and safe workaround
+- Detailed DiskSpd XML output structure
+- Ethr vs iperf3 vs Latte tool selection guide
 
 ---
 
 ## 2. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    MIXIEE APP (Frontend)                 │
-│              Next.js / Electron / Tauri UI               │
-├─────────────────────────────────────────────────────────┤
-│                  BENCHMARK ORCHESTRATOR                  │
-│    (Manages test execution, scheduling, result storage)  │
-├──────────┬──────────┬──────────┬──────────┬─────────────┤
-│   CPU    │   GPU    │   DISK   │ NETWORK  │  LATENCY    │
-│  Module  │  Module  │  Module  │  Module  │  Module     │
-├──────────┴──────────┴──────────┴──────────┴─────────────┤
-│               HARDWARE MONITORING LAYER                  │
-│        (LibreHardwareMonitor / WMI / Telemetry)          │
-├─────────────────────────────────────────────────────────┤
-│                    RESULTS ENGINE                        │
-│    (Scoring, comparison, history, export to JSON/CSV)    │
-└─────────────────────────────────────────────────────────┘
++----------------------------------------------------------------------+
+|                        MIXIEE APP (Frontend)                          |
+|              Next.js / Electron / Tauri / WinUI 3 UI                 |
++----------------------------------------------------------------------+
+|                  BENCHMARK ORCHESTRATOR (.NET / Rust)                 |
+|     (Process spawner, scheduler, result aggregator, JSON parser)      |
++----------+----------+----------+----------+----------+---------------+
+|   CPU    |   MEM    |   GPU    |   DISK   |   NET    |   LATENCY     |
+|  Module  |  Module  |  Module  |  Module  |  Module  |   Module      |
++----------+----------+----------+----------+----------+---------------+
+|                     HARDWARE MONITORING LAYER                         |
+|        LibreHardwareMonitor / Intel PCM / System Informer APIs        |
++----------------------------------------------------------------------+
+|                         RESULTS ENGINE                                |
+|    Scoring, normalization, history, before/after diff, JSON export    |
++----------------------------------------------------------------------+
 ```
 
-**Suggested App Framework:** If building as a desktop app, consider **Tauri** (Rust backend + web frontend) or **Electron** — both can spawn native processes (the benchmarking tools) and capture their stdout/JSON output.
+### Recommended Technology Stack
+
+| Layer | Recommendation | Why |
+|-------|---------------|-----|
+| App Framework | Tauri (Rust + WebView) or Electron | Cross-platform, easy subprocess spawning |
+| Backend Language | C# (.NET 8) or Rust | Easy process spawning, JSON parsing, NuGet ecosystem |
+| Benchmark Orchestration | Process.Start() / Command::new() | Simple, zero IPC overhead |
+| Result Storage | SQLite | Lightweight, embedded, perfect for local history |
+| UI Charts | Chart.js, Recharts, or ECharts | Web-based, beautiful, zero license issues |
+| Hardware Monitoring | LibreHardwareMonitorLib (NuGet) | Most complete Windows sensor library |
 
 ---
 
 ## 3. CPU Benchmarking
 
-### 3.1 sysbench — CPU Module
+### 3.1 sysbench — Integer Throughput (Recommended Primary)
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/akopytov/sysbench |
 | **License** | GPLv2 |
 | **Language** | C + LuaJIT |
-| **Platforms** | Linux, macOS, Windows (via WSL) |
-| **What it measures** | CPU computational throughput (prime number calculation), multi-threaded performance |
-| **Key command** | `sysbench cpu --cpu-max-prime=20000 --threads=N run` |
-| **Output** | Events/sec, latency percentiles (min/avg/max/p95/p99), total time |
-| **Resource usage** | Very low — runs for a few seconds, pure CPU-bound, no disk/network |
-| **Stars** | 6k+ |
+| **Platforms** | Linux, macOS, Windows (native binary in releases) |
+| **Stars** | 6,000+ |
 
-**Why it's good for Mixiee:**
-- Industry-standard micro-benchmark
-- Extremely configurable thread count and workload size
-- Built-in latency histograms
-- JSON-parseable output available
-- Can scale from a 2-second quick test to a 60-second stress test
+**What it measures:** Prime number computation throughput. Industry-standard CPU integer benchmark.
 
-**Integration approach:**
-- Bundle the sysbench binary or invoke via WSL on Windows
-- Parse JSON output for scoring
-- Run with `--threads=1` for single-core and `--threads=<core_count>` for multi-core scores
+**Key commands:**
+```
+sysbench cpu --cpu-max-prime=20000 --threads=1 --time=10 run    # single-core
+sysbench cpu --cpu-max-prime=20000 --threads=N --time=10 run    # multi-core
+```
 
-### 3.2 stress-ng (Stress Test & Throughput Measurement)
+**Output metrics:**
+- `events per second` — primary throughput figure
+- `avg/min/max/p95/p99 latency (ms)` — consistency measurement
+- `total time`, `total events`
+
+**Why it is ideal for Mixiee:**
+- No disk or network interaction — pure CPU-bound
+- Can run as short as 5 seconds for a quick test
+- Built-in latency percentiles (p95/p99) excellent for before/after comparison
+- Output is easily parseable structured text
+- Configurable prime ceiling to adjust difficulty and test duration
+
+---
+
+### 3.2 stress-ng — Targeted CPU Feature Stressors
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/ColinIanKing/stress-ng |
 | **License** | GPLv2+ |
 | **Language** | C |
-| **Platforms** | Linux, BSD, macOS, Windows (WSL/Cygwin), Android |
-| **What it measures** | 370+ stressor types covering CPU (integer, float, bit manipulation, matrix ops, crypto, etc.), memory, cache |
-| **Key command** | `stress-ng --cpu 4 --cpu-method matrixprod --metrics-brief -t 10` |
-| **Output** | Bogo-ops/sec per stressor, real-time metrics |
-| **Resource usage** | Configurable — can run for as short as 1 second |
+| **Platforms** | Linux, macOS, BSD, Windows (WSL), Android — 370+ stressor types |
+| **Stars** | 3,000+ |
 
-**Why it's good for Mixiee:**
-- 100+ CPU-specific stress tests (floating point, integer, SIMD, AES, SHA, matrix multiply)
-- Can target specific CPU features to show tuning impact (e.g., power plan changes, affinity tweaks)
-- Built-in throughput measurement mode
-- Extremely portable
+**Key CPU stressors for tuning validation:**
 
-**Integration approach:**
-- Use specific stressors that represent real-world workloads:
-  - `--cpu-method matrixprod` (matrix multiplication — represents scientific/gaming workloads)
-  - `--cpu-method fft` (FFT — represents audio/signal processing)
-  - `--cpu-method ackermann` (recursive — represents compiler/algorithm workloads)
-- Parse metrics output for before/after comparison
+| Stressor | What it represents |
+|----------|-------------------|
+| `matrixprod` | Dense matrix multiply — gaming, ML |
+| `fft` | Fast Fourier Transform — audio/DSP processing |
+| `sha256` | Cryptographic hashing |
+| `aes` | AES encryption (tests AES-NI instruction use) |
+| `euler` | Scientific numerical computation |
+| `int32` | Integer ALU throughput |
+| `float128` | FPU utilization |
+| `cache-thrash` | Cache hierarchy stress |
 
-### 3.3 UnixBench (BYTE Unix Benchmark)
+**Key command:** `stress-ng --cpu 4 --cpu-method matrixprod --metrics-brief --timeout 15s`
+
+**Why it is valuable for Mixiee:**
+- Match stressor to the user's tuning target — power plan changes, show `matrixprod` before/after
+- CPU affinity changes — compare `euler` results
+- 100% CPU-targeted with zero disk/network activity
+
+---
+
+### 3.3 BenchmarkDotNet — If Mixiee Is Built with .NET
 
 | Attribute | Detail |
 |-----------|--------|
-| **Repository** | https://github.com/kdlucas/byte-unixbench |
-| **License** | GPLv2 |
-| **Language** | C + Shell |
-| **Platforms** | Linux/Unix |
-| **What it measures** | Dhrystone (integer), Whetstone (floating point), execl throughput, pipe throughput, context switching, process creation, shell scripts, system call overhead |
-| **Output** | Index score relative to baseline (SPARCstation 20-61 = 10.0) |
-| **Resource usage** | Moderate — full suite takes ~30 minutes, individual tests are quick |
+| **Repository** | https://github.com/dotnet/BenchmarkDotNet |
+| **License** | MIT |
+| **Language** | C# |
+| **Platforms** | Windows, Linux, macOS |
+| **NuGet** | BenchmarkDotNet |
+| **Stars** | 11,000+ |
+| **Users** | .NET Runtime, Roslyn, ASP.NET Core, 27,400+ GitHub projects |
 
-**Why it's good for Mixiee:**
-- Produces a single composite score (easy for users to understand)
-- Tests both single-threaded and multi-threaded (N = CPU count)
-- Includes Dhrystone and Whetstone — classic and widely understood benchmarks
-- Good for showing "overall system CPU improvement"
+**Why it is the gold standard for .NET benchmarking:**
+- Statistical engine using perfolizer — confidence intervals, outlier detection, p-values
+- Automatically detects JIT warm-up issues and warns the developer
+- Supports multiple runtimes in one run: .NET 8, .NET Framework, Mono, NativeAOT
+- Nanosecond-precision timing
+- Memory allocation tracking — managed heap allocations, GC pressure
+- Hardware counters via ETW — CPU cycles, cache misses, branch mispredicts
+- Exports JSON, CSV, HTML, Markdown
 
-**Integration approach:**
-- Run a subset of tests (Dhrystone + Whetstone + Pipe) for a quick ~2 minute benchmark
-- Use the index score as Mixiee's "CPU Score"
+**Sample output:**
+```
+| Method | N     | Mean       | Error     | StdDev    | Ratio |
+|------- |------ |-----------:|----------:|----------:|------:|
+| SHA256 | 1000  |   7.735 us | 0.191 us  | 0.403 us  |  1.00 |
+| MD5    | 1000  |   2.872 us | 0.055 us  | 0.074 us  |  0.37 |
+```
 
-### 3.4 Google Benchmark (Micro-benchmark Library)
+---
+
+### 3.4 Google Benchmark — C++ Custom Benchmarks
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/google/benchmark |
 | **License** | Apache 2.0 |
-| **Language** | C++ |
+| **Language** | C++ (requires C++17) |
 | **Platforms** | Windows, Linux, macOS |
-| **What it measures** | Custom micro-benchmarks — you define what to measure |
-| **Output** | JSON/CSV with nanosecond-precision timing |
+| **Stars** | 9,000+ |
+| **Output** | --benchmark_format=json — nanosecond precision |
 
-**Why it's good for Mixiee:**
-- Build custom CPU benchmarks tailored to your specific tuning scenarios
-- Nanosecond precision timing with statistical analysis
-- Perfect for creating "Mixiee-branded" CPU tests
-- Apache 2.0 license — very permissive, commercially friendly
+**Use case for Mixiee:** Build Mixiee-branded custom C++ workloads (sorting, compression, hash tables, encryption, vector math) that directly represent what users care about. Apache 2.0 license means full commercial freedom.
 
-**Integration approach:**
-- Write custom C++ benchmark functions that simulate real workloads
-- Compile as a DLL/shared library and invoke from the Mixiee app
-- Full control over what you measure and how you score it
+**Key features:**
+- BENCHMARK_RANGE(fn, lo, hi) — automatically sweeps parameter ranges
+- state.SetBytesProcessed() — auto-calculates MB/s from time
+- ThreadRange(1, N) — multi-threaded benchmarking built-in
+- CPU frequency scaling detection — warns if throttling during benchmark
 
 ---
 
-## 4. GPU Benchmarking
+### 3.5 OpenSSL Speed — Cryptographic CPU Throughput
 
-### 4.1 vkpeak — Vulkan Peak Performance
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/openssl/openssl |
+| **License** | Apache 2.0 |
+| **Language** | C (with platform assembly for AES-NI, SHA-NI, AVX2/512) |
+| **Platforms** | All (Windows via slproweb.com or Chocolatey) |
+| **Stars** | 26,000+ |
+
+**Why it matters for Mixiee:**
+- Directly tests CPU hardware acceleration: AES-NI, SHA-NI, CLMUL, AVX2/512 instructions
+- Power plan and CPU frequency changes dramatically affect crypto throughput
+- Results in MB/s for symmetric ciphers — easy to understand
+- Validates that enabling hardware instruction sets actually works
+
+**Key command:**
+```
+openssl speed aes-128-cbc aes-256-gcm sha256 sha512 rsa2048 -seconds 10
+```
+
+**Sample output:**
+```
+aes-128-cbc    16384 bytes:  5374.6 MB/s
+sha256         16384 bytes:  8942.1 MB/s
+rsa2048       sign/s: 8934   verify/s: 271142
+```
+
+---
+
+### 3.6 Intel PCM — Intel Processor Performance Counter Monitor
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/intel/pcm |
+| **License** | BSD 3-Clause |
+| **Language** | C++ |
+| **Platforms** | Linux, Windows, macOS, FreeBSD |
+| **Stars** | 3,000+ |
+
+**Sub-tools and what they measure:**
+
+| Tool | Measures |
+|------|---------|
+| `pcm` | IPC, core frequency (actual Turbo), L2/L3 cache hit rates, memory BW, QPI bandwidth |
+| `pcm-memory` | Per-DRAM-channel bandwidth and per-DIMM-rank bandwidth |
+| `pcm-latency` | L1 cache miss latency, DDR/PMM memory latency |
+| `pcm-power` | Package/core/DRAM power, C-state residency, thermal throttle events |
+| `pcm-pcie` | PCIe bandwidth per socket |
+| `pcm-iio` | PCIe bandwidth per device |
+| `pcm-numa` | Local vs remote memory access ratio |
+| `pcm-sensor-server` | JSON/Prometheus HTTP endpoint for programmatic integration |
+
+**Why it is a hidden gem for Mixiee:**
+- Memory latency changes from RAM timing tuning — visible in pcm-latency
+- IPC changes from power plan tuning — visible in pcm
+- L3 cache miss rate changes — shows cache-friendliness improvements
+- DRAM energy changes from undervolting — shows efficiency gains
+- The pcm-sensor-server exposes all metrics as JSON over HTTP for direct API polling
+
+**Integration example:**
+```
+pcm-sensor-server -port 9738
+curl http://localhost:9738/api/persecond/json
+```
+
+---
+
+### 3.7 lmbench — System Micro-Latency Suite
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/intel/lmbench |
+| **License** | GPLv2 |
+| **Language** | C |
+| **Platforms** | Linux, Unix (Intel-maintained fork) |
+| **Paper** | McVoy and Staelin, USENIX 1996 — seminal systems benchmarking paper |
+
+**Most valuable sub-benchmarks:**
+
+| Tool | Measures | Tuning relevance |
+|------|---------|-----------------|
+| `lat_mem_rd` | Memory latency at each working set size (maps all cache levels) | Shows RAM CL timing improvement |
+| `bw_mem` | Memory bandwidth (read, write, copy, bcopy) | Baseline memory BW |
+| `lat_ctx` | Context switch time for N processes | Scheduler tuning impact |
+| `lat_proc` | Fork/exec/shell process creation latency | Memory and scheduler efficiency |
+| `lat_pipe` | Pipe IPC latency | IPC performance |
+| `lat_unix` | Unix domain socket latency | Local socket performance |
+| `lat_cache` | L1/L2/L3/TLB cache latency at each level | Cache hierarchy characterization |
+
+**Sample lat_mem_rd output (reveals full memory hierarchy):**
+```
+stride=16
+0.25000 MB -> 1.609 ns   (L1 cache)
+1.00000 MB -> 4.021 ns   (L2 cache boundary)
+4.00000 MB -> 11.834 ns  (L3 cache boundary)
+32.0000 MB -> 35.211 ns  (LLC boundary)
+256.000 MB -> 87.432 ns  (RAM latency)
+```
+
+This single output shows exactly how L1/L2/L3/RAM latency changes after RAM timing tuning.
+
+---
+
+## 4. Memory Bandwidth & Latency Benchmarking
+
+### 4.1 STREAM — The Industry Standard Memory Bandwidth Benchmark
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/jeffhammond/STREAM |
+| **License** | Custom — free non-commercial, restricted commercial redistribution |
+| **Language** | C (and Fortran) |
+| **Canonical site** | http://www.cs.virginia.edu/stream/ |
+| **Author** | Dr. John D. McCalpin — "Dr. Bandwidth" at IBM |
+
+**The 4 STREAM tests (all operate on arrays larger than L3 cache):**
+
+| Test | Operation | Description |
+|------|-----------|-------------|
+| Copy | a[i] = b[i] | Measures read + write bandwidth |
+| Scale | a[i] = q * b[i] | Read + scalar multiply + write |
+| Add | a[i] = b[i] + c[i] | Two reads + one write |
+| Triad | a[i] = b[i] + q * c[i] | Most representative — used as "the number" |
+
+**Sample output:**
+```
+Function     Best Rate MB/s   Avg time     Min time     Max time
+Copy:              52847.3   0.006079     0.006056     0.006126
+Scale:             52163.5   0.006148     0.006133     0.006158
+Add:               58124.1   0.008265     0.008260     0.008272
+Triad:             57989.2   0.008286     0.008279     0.008305
+```
+
+**Why it is essential for Mixiee:**
+- The Triad result is the single most-cited memory bandwidth figure in the industry — comparable to every CPU/RAM review ever published
+- Before/after XMP/EXPO profile changes or RAM frequency tuning: direct, reproducible impact
+- Compile with OpenMP for multi-threaded test
+- One tiny C file — compiles in under a second
+
+**STREAM license safe workaround:** The license prohibits commercial redistribution of compiled binaries. Safe options:
+1. Ship the source (one stream.c file) and compile it at first run
+2. Implement the same 4 operations natively in Mixiee — the mathematical concept is not copyrightable
+
+---
+
+### 4.2 tinymembench — Peak Memory Bandwidth + Random Latency
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/ssvb/tinymembench |
+| **License** | MIT |
+| **Language** | C + hand-optimized assembly (SSE2, NEON) |
+| **Platforms** | Linux, Windows (MinGW), Android |
+
+**Sample output:**
+```
+C copy backwards                         :   9534.4 MB/s
+SSE2 copy                                :  24388.9 MB/s
+SSE2 streaming copy                      :  24501.1 MB/s
+SSE2 streaming write                     :  14582.2 MB/s
+random read (pointer chasing)            :    148.7 MB/s (107.6 ns)
+```
+
+**Why it complements STREAM:**
+- STREAM measures sustained bandwidth; tinymembench shows peak bandwidth achievable with SSE2 optimized code
+- The random read result gives memory latency in nanoseconds — directly shows impact of RAM CAS latency tuning
+- MIT license — embed freely
+- Tiny binary (~50KB) — trivial to bundle
+
+---
+## 5. GPU Benchmarking
+
+### 5.1 vkpeak — Peak Vulkan Compute (Primary Recommendation)
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/nihui/vkpeak |
 | **License** | MIT |
-| **Language** | C++ (Vulkan compute shaders) |
-| **Platforms** | Windows, Linux, macOS (via MoltenVK), Android |
-| **GPU support** | Intel, AMD, NVIDIA, Apple (any Vulkan-capable GPU) |
-| **What it measures** | Peak GFLOPS (fp32, fp16, fp64), peak GIOPS (int32, int16, int8), memory bandwidth (host-to-device, device-to-device, etc.) |
-| **Key command** | `vkpeak.exe [device_id] [scenario]` |
-| **Output** | GFLOPS / GIOPS / GBPS per scenario |
-| **Resource usage** | Very low — runs in a few seconds, pure synthetic compute |
+| **Language** | C++ + GLSL compute shaders (Vulkan) |
+| **Platforms** | Windows, Linux, macOS (MoltenVK), Android |
+| **GPU support** | All Vulkan-capable GPUs: Intel, AMD, NVIDIA, Apple |
 
-**Why it's good for Mixiee:**
-- ⭐ **TOP RECOMMENDATION FOR GPU BENCHMARKING** ⭐
-- Cross-vendor (AMD, NVIDIA, Intel) via Vulkan — no vendor lock-in
-- Measures actual compute throughput, not just a framerate proxy
-- MIT license — fully permissive, can embed in commercial products
-- Lightweight and fast — perfect for quick before/after comparisons
-- Covers FP32, FP16, INT8, matrix ops, memory bandwidth
-- Available scenarios: `fp32-scalar`, `fp32-vec4`, `fp16-scalar`, `fp16-vec4`, `fp16-matrix`, `fp64-scalar`, `fp64-vec4`, `int32-scalar`, `int32-vec4`, `int16-scalar`, `int16-vec4`, `int64-scalar`, `int64-vec4`, `int8-dotprod`, `int8-matrix`, `bf16-dotprod`, `bf16-matrix`, `copy-h2h`, `copy-h2d`, `copy-d2h`, `copy-d2d`
+**Complete list of benchmark scenarios:**
 
-**Sample output (NVIDIA RTX 5060Ti):**
+| Scenario | Metric | What it tests |
+|----------|--------|--------------|
+| fp32-scalar, fp32-vec4 | GFLOPS | Single-precision FP (gaming, general compute) |
+| fp16-scalar, fp16-vec4, fp16-matrix | GFLOPS | Half-precision (AI inference, ray tracing) |
+| fp64-scalar, fp64-vec4 | GFLOPS | Double-precision (scientific computing) |
+| int32/int16/int64-scalar/vec4 | GIOPS | Integer throughput |
+| int8-dotprod, int8-matrix | GIOPS | INT8 deep learning inference |
+| bf16-dotprod, bf16-matrix | GFLOPS | BFloat16 (modern AI training) |
+| fp8-matrix, bf8-matrix | GFLOPS | FP8 (Ada/RDNA3+ next-gen AI) |
+| copy-h2h | GBPS | CPU RAM to CPU RAM bandwidth |
+| copy-h2d | GBPS | CPU RAM to GPU VRAM (PCIe bandwidth) |
+| copy-d2h | GBPS | GPU VRAM to CPU RAM (PCIe bandwidth) |
+| copy-d2d | GBPS | GPU VRAM internal bandwidth |
+
+**Real benchmark sample (RTX 5060Ti 16GB):**
 ```
-fp32-scalar  = 17137.46 GFLOPS
+fp32-vec4    = 17137.46 GFLOPS
 fp16-matrix  = 101485.35 GFLOPS
 int8-matrix  = 202947.80 GIOPS
 copy-d2d     = 190.70 GBPS
+copy-h2d     = 17.93 GBPS
 ```
 
-**Integration approach:**
-- Bundle the vkpeak binary (it's a single executable)
-- Run specific scenarios: `fp32-vec4` (general GPU compute), `copy-d2d` (VRAM bandwidth)
-- Parse stdout for GFLOPS/GBPS values
-- Create a composite "GPU Score" from weighted fp32 + memory bandwidth results
+**Recommended scenarios for Mixiee quick GPU test (5 scenarios, ~15 seconds total):**
+- `fp32-vec4` — general gaming/compute score
+- `fp16-matrix` — AI/modern rendering acceleration score
+- `copy-d2d` — VRAM bandwidth (affected by GPU clock and GDDR speed)
+- `copy-h2d` — PCIe bandwidth (affected by PCIe power management settings)
+- `int8-matrix` — AI inference score
 
-### 4.2 GPUPerfAPI (AMD GPU Performance API)
+---
 
-| Attribute | Detail |
-|-----------|--------|
-| **Repository** | https://github.com/GPUOpen-Tools/gpu_performance_api |
-| **License** | MIT |
-| **Language** | C/C++ |
-| **Platforms** | Windows, Linux |
-| **GPU support** | AMD Radeon (RDNA/RDNA2/RDNA3 — GFX IP v10+) |
-| **What it measures** | GPU hardware performance counters — shader utilization, memory bandwidth, cache hit rates, occupancy, wavefront stats |
-| **APIs supported** | Vulkan, DirectX 12, DirectX 11, OpenGL |
-
-**Why it's good for Mixiee:**
-- Deep hardware-level performance data (not just FLOPS but actual GPU utilization %)
-- Shows exactly how GPU resources are being used
-- Can demonstrate tuning impact at the hardware counter level (e.g., "your GPU clock tweak increased shader utilization by 15%")
-- Used by Radeon GPU Profiler — proven reliability
-
-**Limitation:** AMD-only. For NVIDIA, equivalent functionality requires NVAPI (proprietary) or NVIDIA Nsight.
-
-**Integration approach:**
-- Use as a supplementary data source on AMD systems
-- Link against the GPA library and query counters during GPU benchmarks
-- Show detailed GPU metrics alongside vkpeak scores
-
-### 4.3 PresentMon (Frame Timing & Display Latency)
+### 5.2 PresentMon — Frame Timing, Input Latency & GPU Telemetry
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/GameTechDev/PresentMon |
 | **License** | MIT |
 | **Language** | C++ |
-| **Platforms** | Windows |
-| **What it measures** | CPU frame time, GPU frame time, display latency, input latency, frame pacing, GPU active time |
-| **APIs supported** | DirectX 11/12, OpenGL, Vulkan |
+| **Platforms** | Windows 10/11 only |
+| **GPU support** | All (DirectX 11/12, Vulkan, OpenGL) via ETW |
+| **Stars** | 3,000+ |
+| **Used by** | AMD OCAT, NVIDIA FrameView, CapFrameX internally |
 
-**Why it's good for Mixiee:**
-- ⭐ **CRITICAL FOR GAMING LATENCY MEASUREMENT** ⭐
-- Industry-standard tool used by AMD OCAT, CapFrameX, NVIDIA FrameView
-- Measures the full frame delivery pipeline: CPU render → GPU render → Display
-- Includes input-to-display latency measurement
-- CSV output with per-frame data
-- PresentMon Service provides a C++ API for programmatic access
-- Includes hardware telemetry (GPU power, temperature, utilization via vendor APIs)
+**PresentMon v2 Architecture:**
+1. PresentMon Service — Windows service capturing ETW frame data + hardware telemetry
+2. PresentMon SDK — C header PresentMonAPI.h + PresentMonAPI2.dll for programmatic integration
+3. PresentMon Console Application — CLI for capture and CSV output
+4. PresentMon Capture Application — Reference GUI client
 
-**Integration approach:**
-- Use the PresentMon Service + API for programmatic integration
-- Capture frame timing during a short GPU benchmark workload
-- Report: avg FPS, 1% low FPS, 0.1% low FPS, frame time consistency, input latency
-- Compare frame times before/after tuning to show smoothness improvement
+**Per-frame metrics captured:**
+- `CPUFrameTime` — time CPU spent preparing the frame (ms)
+- `GPUFrameTime` — time GPU spent rendering the frame (ms)
+- `DisplayLatency` — total pipeline: CPU start to pixel on screen (ms)
+- `InputLatency` — hardware input event to pixel response (ms)
+- `PresentMode` — flip type (flip, blit, independent flip, etc.)
+- `Dropped` — whether the display compositor dropped this frame
 
-### 4.4 MangoHud (Overlay & Logging — Linux)
+**GPU telemetry (from hardware vendors):**
+- GPU utilization %, GPU power (W), GPU temperature (C)
+- VRAM usage (MB), GPU clock speed (MHz)
+- Render/compute/video engine utilization
 
-| Attribute | Detail |
-|-----------|--------|
-| **Repository** | https://github.com/flightlessmango/MangoHud |
-| **License** | MIT |
-| **Language** | C++ |
-| **Platforms** | Linux |
-| **What it measures** | FPS, frame times, CPU/GPU load, temperatures, VRAM usage |
+**SDK integration (C API):**
+```c
+// Include the SDK header (distributed with PresentMon Service installer)
+#include "PresentMonAPI.h"
 
-**Why it's good for Mixiee (Linux):**
-- Real-time overlay + CSV logging
-- Supports both Vulkan and OpenGL
-- Can log to CSV for post-analysis
-- Companion tool `mangoplot` for visualization
+PM_STATUS status = pmOpenSession(&session);
+status = pmStartTracking(session, processId);
 
-### 4.5 Radeon GPU Profiler (RGP)
+PM_FRAME_DATA frameData = {0};
+status = pmGetFrameDataForProcess(session, processId, &frameData, &frameCount);
+// frameData[i]: cpuFrameTime, gpuFrameTime, displayLatency, inputLatency...
 
-| Attribute | Detail |
-|-----------|--------|
-| **Repository** | https://github.com/GPUOpen-Tools/radeon_gpu_profiler |
-| **License** | MIT |
-| **Language** | C++ |
-| **Platforms** | Windows 10/11, Ubuntu 24.04 |
-| **GPU support** | AMD Radeon RX 5000/6000/7000/9000 series |
+pmStopTracking(session, processId);
+pmCloseSession(session);
+```
 
-**Why it's good for Mixiee:**
-- Deep GPU profiling with hardware thread-tracing
-- Visualizes how DirectX 12 and Vulkan workloads interact with GPU hardware
-- Can show impact of GPU clock/power tuning at the shader level
+**Derived metrics for Mixiee scoring:**
+- Average FPS = 1000 / mean(FrameTime)
+- 1% Low FPS = 1000 / p99(FrameTime) — the gaming smoothness metric everyone cares about
+- 0.1% Low FPS = 1000 / p99.9(FrameTime) — worst-case stutter
+- Frame time variance (StdDev) — consistency score
+- Average input latency (ms) — the #1 impact metric for gamers
 
 ---
 
-## 5. Disk / Storage Benchmarking
-
-### 5.1 fio (Flexible I/O Tester)
+### 5.3 glmark2 — OpenGL Rendering Benchmark (Linux)
 
 | Attribute | Detail |
 |-----------|--------|
-| **Repository** | https://github.com/axboe/fio |
-| **License** | GPLv2 |
-| **Language** | C |
-| **Platforms** | Linux, Windows (via Cygwin or native MSI installer), macOS, BSDs, Android |
-| **What it measures** | Sequential read/write, random read/write, mixed workloads, IOPS, bandwidth, latency |
-| **Output** | JSON output with detailed IOPS, bandwidth (MB/s), latency (min/avg/max/p99), completion latency histograms |
-| **Resource usage** | Configurable — can run a 4K random read test in 5 seconds |
+| **Repository** | https://github.com/glmark2/glmark2 |
+| **License** | GPLv3 |
+| **Language** | C++ |
+| **Platforms** | Linux (X11, Wayland, DRM/KMS), Android |
+| **GPU support** | All (OpenGL 2.0 and ES 2.0) |
 
-**Why it's good for Mixiee:**
-- ⭐ **INDUSTRY GOLD STANDARD FOR DISK BENCHMARKING** ⭐
-- Used by every major storage vendor, cloud provider, and review site
-- Extremely flexible — can simulate any I/O workload
-- JSON output makes it easy to parse programmatically
-- Windows installer available since fio 3.31
-- Supports all I/O engines: sync, async (libaio), io_uring, Windows IOCP
+**Test scenes:** build, texture, shading, bump mapping, effect2d, pulsar, desktop, buffer, ideas, jellyfish, terrain, shadow, refract, conditionals, function, loop.
 
-**Key test profiles for Mixiee:**
+Each scene tests a different GPU rendering code path. Final score is a composite of FPS across all scenes.
 
-```ini
-# Sequential Read (measures sustained throughput)
-[seq-read]
-rw=read
-bs=1M
-size=1G
-numjobs=1
-runtime=10
-time_based=1
+**Use for Mixiee (Linux):** Shows rendering pipeline impact of GPU driver tuning and GPU clock changes. Score is directly comparable across driver versions and across time.
 
-# Sequential Write
-[seq-write]
-rw=write
-bs=1M
-size=1G
-numjobs=1
-runtime=10
-time_based=1
+---
 
-# Random Read 4K (measures IOPS — most important for responsiveness)
-[rand-read-4k]
-rw=randread
-bs=4k
-size=1G
-numjobs=4
-iodepth=32
-runtime=10
-time_based=1
+### 5.4 GPUPerfAPI + Radeon GPU Profiler — AMD Deep Analysis
 
-# Random Write 4K
-[rand-write-4k]
-rw=randwrite
-bs=4k
-size=1G
-numjobs=4
-iodepth=32
-runtime=10
-time_based=1
+| Tool | Repository | License | What it shows |
+|------|-----------|---------|--------------|
+| GPUPerfAPI | https://github.com/GPUOpen-Tools/gpu_performance_api | MIT | Hardware counters per drawcall: shader utilization, cache hit rates, memory BW |
+| Radeon GPU Profiler | https://github.com/GPUOpen-Tools/radeon_gpu_profiler | MIT | GPU thread-level trace, wavefront statistics, synchronization overhead |
 
-# Mixed Random Read/Write (70/30 — simulates real usage)
-[mixed-rw]
-rw=randrw
-rwmixread=70
-bs=4k
-size=1G
-numjobs=4
-iodepth=32
-runtime=10
-time_based=1
-```
+**Both are AMD Radeon RDNA only (RX 5000+).** Use as supplementary deep-dive tools for AMD users wanting to validate GPU overclocking and undervolting at the hardware counter level.
 
-**Integration approach:**
-- Bundle fio Windows binary (available from GitHub releases)
-- Create pre-defined job files for quick/standard/thorough test modes
-- Parse JSON output (`--output-format=json+`)
-- Key metrics to extract:
-  - **Sequential Read MB/s** (shows raw drive speed)
-  - **Sequential Write MB/s**
-  - **4K Random Read IOPS** (shows drive responsiveness)
-  - **4K Random Write IOPS**
-  - **Average latency** and **p99 latency** (shows consistency)
-- Create composite "Disk Score" from weighted metrics
+---
 
-### 5.2 DiskSpd (Microsoft)
+## 6. Disk / Storage Benchmarking
+
+### 6.1 DiskSpd — Windows Native Disk Benchmark (Primary for Windows)
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/microsoft/diskspd |
 | **License** | MIT |
 | **Language** | C++ |
-| **Platforms** | Windows only (8+, Server 2012+) |
-| **What it measures** | Same as fio but Windows-native: sequential/random read/write, IOPS, bandwidth, latency, CPU usage |
-| **Output** | Text + XML with detailed per-thread statistics |
-| **Resource usage** | Very low — single lightweight exe |
+| **Platforms** | Windows 8+, Windows Server 2012+ |
+| **Binary** | ~200KB single portable exe, no install needed |
+| **Output** | Text + XML (-Rxml flag) |
+| **Stars** | 2,000+ |
 
-**Why it's good for Mixiee:**
-- ⭐ **BEST FOR NATIVE WINDOWS DISK BENCHMARKING** ⭐
-- Made by Microsoft — uses native Windows I/O stack (no translation layer)
-- Single portable .exe — no installation needed
-- Supports direct I/O (bypass file system cache), write-through, memory-mapped I/O
-- Latency histograms to 9-nines precision
-- Reports CPU usage during I/O (useful for showing efficiency improvements)
-- Reports processor topology: Socket, NUMA, Core, big/little cores (Windows 11 Arm)
+**DiskSpd uses Windows IOCP** — the most efficient Windows I/O model — and direct I/O (-Sh) to bypass file system cache for true disk measurements.
 
-**Key commands for Mixiee:**
+**Unique feature not in fio:** Reports per-logical-processor CPU usage during I/O — shows NVMe driver efficiency improvements from tuning.
 
+**Key test commands:**
 ```powershell
-# Sequential Read 1MB blocks, 1 thread, 10 seconds, disable caching
-diskspd -b1M -d10 -o4 -t1 -Sh -r -W5 -L testfile.dat
+# Create 2GB test file
+diskspd -c2G testfile.dat
 
-# Random Read 4K, 4 threads, queue depth 32, 10 seconds
-diskspd -b4K -d10 -o32 -t4 -Sh -r -W5 -L testfile.dat
+# Sequential Read (1MB blocks, no cache, queue depth 4)
+diskspd -b1M -d15 -o4 -t1 -Sh -r -W5 -L testfile.dat
 
 # Sequential Write
-diskspd -b1M -d10 -o4 -t1 -Sh -w100 -W5 -L testfile.dat
+diskspd -b1M -d15 -o4 -t1 -Sh -w100 -W5 -L testfile.dat
+
+# Random Read 4K (QD32, 4 threads — NVMe-optimal pattern)
+diskspd -b4K -d15 -o32 -t4 -Sh -r -W5 -L testfile.dat
 
 # Random Write 4K
-diskspd -b4K -d10 -o32 -t4 -Sh -w100 -W5 -L testfile.dat
+diskspd -b4K -d15 -o32 -t4 -Sh -w100 -W5 -L testfile.dat
+
+# Mixed 70% Read / 30% Write (desktop simulation)
+diskspd -b4K -d15 -o16 -t4 -Sh -w30 -W5 -L testfile.dat
 ```
 
-**Integration approach:**
-- Bundle the single DiskSpd.exe (download from GitHub releases — ~200KB)
-- Execute via process spawn, capture XML output (`-Rxml`)
-- Parse XML for: ReadBytes/s, WriteBytes/s, IOps, AvgLatencyMs, Latency buckets
-- **Recommended as PRIMARY disk benchmark for Windows** (fio as secondary/cross-platform)
+**Parameters quick reference:**
+- `-b` = block size | `-d` = duration(s) | `-o` = queue depth per thread | `-t` = threads
+- `-Sh` = bypass software + hardware cache | `-r` = random | `-w` = write % | `-W` = warmup seconds | `-L` = measure latency | `-Rxml` = XML output
 
-### 5.3 Comparison: fio vs DiskSpd
+**XML output key fields:**
+```xml
+<Iops>152843.24</Iops>
+<Throughput>596.26</Throughput>
+<Latency>0.208</Latency>
+<Percentile Percentile="99">0.789</Percentile>
+<Percentile Percentile="99.9">1.234</Percentile>
+```
 
-| Feature | fio | DiskSpd |
-|---------|-----|---------|
-| **Platform** | Cross-platform | Windows only |
-| **I/O Engine** | Many (libaio, io_uring, IOCP) | Windows native IOCP |
-| **License** | GPLv2 | MIT |
-| **JSON output** | ✅ Native | ❌ (XML/Text) |
-| **Latency precision** | Microseconds | Nanoseconds (9-nines) |
-| **Windows native** | Via Cygwin/installer | ✅ Fully native |
-| **Community** | Massive (Linux world) | Microsoft-maintained |
-| **Recommendation** | Use on Linux, secondary on Windows | **Primary on Windows** |
+**Per-core CPU usage report (unique to DiskSpd):**
+```
+CPU |  Usage |  User  |  Kernel |  Idle
+  0 |  14.2% |   0.8% |  13.4%  |  85.8%
+  1 |   8.7% |   0.3% |   8.4%  |  91.3%
+```
 
 ---
 
-## 6. Network Benchmarking
-
-### 6.1 iperf3 (Network Bandwidth)
+### 6.2 fio — Flexible I/O Tester (Cross-Platform Gold Standard)
 
 | Attribute | Detail |
 |-----------|--------|
-| **Repository** | https://github.com/esnet/iperf |
-| **License** | BSD 3-Clause |
+| **Repository** | https://github.com/axboe/fio |
+| **License** | GPLv2 |
 | **Language** | C |
-| **Platforms** | Linux, macOS, FreeBSD, Windows (community builds) |
-| **What it measures** | TCP/UDP bandwidth, jitter, packet loss |
-| **Output** | JSON with per-interval and summary statistics |
-| **Resource usage** | Minimal — pure network test |
+| **Author** | Jens Axboe — Linux kernel storage I/O maintainer |
+| **Platforms** | Linux, Windows (installer since v3.31), macOS, BSD, Android, Solaris |
+| **I/O Engines** | io_uring, libaio, IOCP (windowsaio), mmap, sync, posixaio, 20+ more |
+| **Output** | --output-format=json+ — full latency histograms at ns precision |
+| **Stars** | 5,000+ |
 
-**Why it's good for Mixiee:**
-- ⭐ **INDUSTRY STANDARD FOR NETWORK BANDWIDTH TESTING** ⭐
-- Used by every ISP, network engineer, and data center
-- JSON output for easy parsing
-- Measures: throughput (Mbps/Gbps), retransmits, jitter, packet loss
-- Both TCP and UDP support
-- Can test both upload and download directions
+**fio job file for comprehensive Mixiee disk benchmark:**
+```ini
+[global]
+size=2g
+direct=1
+ioengine=windowsaio
+runtime=15
+time_based=1
+filename=fio-test.dat
 
-**Key commands:**
-```bash
-# Server mode
-iperf3 -s
+[seq-read]
+rw=read
+bs=1M
+numjobs=1
+iodepth=8
 
-# Client: TCP bandwidth test (10 seconds, 4 parallel streams)
-iperf3 -c <server> -t 10 -P 4 --json
+[rand-read-4k]
+rw=randread
+bs=4k
+numjobs=4
+iodepth=32
 
-# Client: UDP bandwidth test with jitter measurement
-iperf3 -c <server> -u -b 100M -t 10 --json
+[rand-write-4k]
+rw=randwrite
+bs=4k
+numjobs=4
+iodepth=32
 
-# Client: Reverse mode (download test)
-iperf3 -c <server> -t 10 -R --json
+[mixed-70r-30w]
+rw=randrw
+rwmixread=70
+bs=4k
+numjobs=4
+iodepth=32
 ```
 
-**Integration approach — Two modes:**
+**JSON output key structure:**
+```json
+{
+  "jobs": [{
+    "read": {
+      "iops": 524288,
+      "bw": 2097152,
+      "lat_ns": {
+        "mean": 152000,
+        "percentile": {
+          "99.000000": 200704,
+          "99.900000": 245760
+        }
+      }
+    }
+  }]
+}
+```
 
-1. **Local Network Test (LAN):**
-   - Run iperf3 server on one device, client on the device being benchmarked
-   - Measures actual NIC throughput and driver efficiency
-   - Best for showing impact of NIC driver tuning, interrupt coalescing, RSS settings
+**Windows fio:** Available as official installer from GitHub releases since v3.31. Use ioengine=windowsaio on Windows.
 
-2. **Loopback Test (Single Device):**
-   - Run both server and client on the same machine (`iperf3 -c localhost`)
-   - Measures network stack overhead — useful for showing TCP/IP tuning impact
-   - Not a true "network" test but shows OS networking efficiency
+---
 
-**Challenge:** Requires a server endpoint. Options:
-- Embed iperf3 server in the app (spawn as background process)
-- Use Mixiee cloud servers as test endpoints
-- Allow users to specify their own server
+### 6.3 DiskSpd vs fio — Decision Matrix
 
-### 6.2 Ethr (Microsoft — Cross-Platform Network Tool)
+| Feature | DiskSpd | fio |
+|---------|---------|-----|
+| Platform | Windows only | Cross-platform |
+| License | MIT (embed freely) | GPLv2 (spawn only) |
+| Output format | XML | JSON (easier to parse) |
+| CPU per-core usage during I/O | YES (unique) | No |
+| Windows I/O engine | IOCP native | IOCP via windowsaio |
+| io_uring support | No | Yes (Linux 5.1+) |
+| Latency histograms | 9-nines percentiles | ns-precision full histograms |
+| Recommendation | Primary on Windows | Primary on Linux; fio on Windows too for JSON |
+
+---
+
+## 7. Network Benchmarking
+
+### 7.1 Ethr — Microsoft All-in-One Network Benchmark (Primary)
 
 | Attribute | Detail |
 |-----------|--------|
 | **Repository** | https://github.com/microsoft/ethr |
 | **License** | MIT |
 | **Language** | Go |
-| **Platforms** | Windows, Linux, macOS |
-| **What it measures** | Bandwidth, connections/s, packets/s, latency (TCP/UDP/HTTP/HTTPS/ICMP), TCP connection setup latency, traceroute |
-| **Output** | Text UI + log files |
-| **Resource usage** | Single binary, minimal footprint |
+| **Platforms** | Windows, Linux, macOS (single binary, zero dependencies) |
+| **Stars** | 2,000+ |
 
-**Why it's good for Mixiee:**
-- ⭐ **BEST ALL-IN-ONE NETWORK BENCHMARK FOR WINDOWS** ⭐
-- Natively cross-platform (Go binary — no dependencies)
-- Combines functionality of: iperf3 + ntttcp + psping + sockperf + latte + traceroute
-- Measures things iperf3 doesn't: TCP connection setup latency, connections/sec, packets/sec
-- Text UI mode for real-time visualization
-- MIT license — commercially friendly
+**Ethr replaces multiple separate tools:**
+
+| Need | Old approach | Ethr command |
+|------|-------------|-------------|
+| TCP bandwidth | iperf3 | ethr -c SERVER -n 8 |
+| UDP bandwidth | iperf3 -u | ethr -c SERVER -p udp -n 4 |
+| TCP latency (ping) | psping | ethr -c SERVER -t pi -p tcp |
+| TCP connection setup rate | Manual | ethr -c SERVER -t c -n 64 |
+| Packets per second | Manual | ethr -c SERVER -p udp -t p |
+| ICMP ping | ping.exe | ethr -x TARGET -p icmp -t pi |
+| Traceroute + latency | tracert | ethr -x TARGET -p icmp -t mtr |
+
+**Tuning-relevant tests:**
+- TCP connection latency — affected by Nagle algorithm, TCP_NODELAY, IRQ affinity
+- Packets per second (UDP) — affected by NIC interrupt moderation settings
+- TCP bandwidth — affected by RSS, receive buffer size, NIC offload settings
+
+---
+
+### 7.2 Microsoft Latte — Nanosecond Network Latency
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/microsoft/latte |
+| **License** | MIT |
+| **Language** | C++ |
+| **Platforms** | Windows only |
+| **Precision** | Nanoseconds — the highest precision of any Windows network tool |
+
+**Why Latte is special for Mixiee:**
+- Nanosecond precision — not millisecond like most tools
+- Built-in latency histograms: p25, p50, p75, p90, p95, p99, p99.9
+- Can test loopback (same machine) — shows Windows TCP stack overhead without a second device
+- Directly quantifies impact of: Nagle algorithm tweaks, interrupt coalescing, NIC power management, CPU affinity
+
+**Loopback test commands:**
+```powershell
+# Window 1 - receiver
+latte.exe -a 127.0.0.1:4444 -i 65536 -p tcp
+
+# Window 2 - sender
+latte.exe -c -a 127.0.0.1:4444 -i 65536 -p tcp
+```
+
+**Sample output:**
+```
+Protocol        : TCP
+Iterations      : 65536
+Latency (usec)  p25   p50   p75   p90   p95   p99   p99.9
+                  22    24    27    31    35    48    89
+```
+
+**Tuning impact example:**
+- Before (interrupt coalescing default): p50 = 87us, p99 = 412us
+- After (disable coalescing, set affinity): p50 = 24us, p99 = 89us
+
+---
+
+### 7.3 iperf3 — TCP/UDP Bandwidth Standard
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/esnet/iperf |
+| **License** | BSD 3-Clause |
+| **Language** | C |
+| **Platforms** | Linux, macOS, FreeBSD, Windows (community builds at iperf.fr) |
+| **Output** | --json flag for machine-readable results |
+| **Stars** | 6,000+ |
 
 **Key commands:**
 ```bash
-# Server
-ethr -s
-
-# Bandwidth test (8 threads)
-ethr -c <server> -n 8
-
-# TCP connection latency
-ethr -c <server> -t pi -p tcp -d 0
-
-# Connections per second
-ethr -c <server> -t c -n 64
-
-# UDP packets per second
-ethr -c <server> -p udp -t p -d 0
-
-# ICMP ping latency
-sudo ethr -x <target> -p icmp -t pi -d 0
-
-# Traceroute
-sudo ethr -x <target> -p icmp -t mtr -d 0
+iperf3 -s                                    # Server
+iperf3 -c SERVER -t 15 -P 4 --json          # TCP: 15s, 4 parallel streams
+iperf3 -c SERVER -u -b 0 -t 15 --json       # UDP: max bandwidth
+iperf3 -c SERVER -t 15 -R --json            # Reverse (download test)
+iperf3 -c localhost -t 10 --json            # Loopback (stack efficiency)
 ```
 
-**Integration approach:**
-- Bundle the ethr binary (single executable, ~10MB)
-- Run latency tests against known Mixiee servers or public endpoints
-- Key metrics to show tuning impact:
-  - **TCP connection setup latency** (affected by TCP tuning, Nagle, etc.)
-  - **Bandwidth** (affected by RSS, NIC driver settings, buffer sizes)
-  - **Packets/sec** (affected by interrupt moderation, CPU affinity)
+---
 
-### 6.3 ntttcp (Microsoft — Windows Network Throughput)
+### 7.4 ntttcp — Windows Network Throughput
 
 | Attribute | Detail |
 |-----------|--------|
@@ -552,15 +774,28 @@ sudo ethr -x <target> -p icmp -t mtr -d 0
 | **License** | MIT |
 | **Language** | C++ |
 | **Platforms** | Windows only |
-| **What it measures** | TCP/UDP throughput with precise Windows I/O completion port implementation |
 
-**Why it's good for Mixiee:**
-- Microsoft's own network throughput tool
-- Uses Windows-native I/O completion ports for maximum accuracy
-- Great for measuring Windows network stack performance
-- Lightweight single binary
+Windows-native TCP/UDP throughput test using IOCP. Supports processor-group affinity — important for many-core systems and NUMA analysis. Used by Azure/Hyper-V teams for VM network performance testing.
 
-### 6.4 ctsTraffic (Microsoft — Network Reliability & Performance)
+---
+
+### 7.5 LibreSpeed — Self-Hosted Internet Speed Test
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/librespeed/speedtest |
+| **License** | LGPLv3 |
+| **Language** | JavaScript frontend, PHP/Go/Rust/Node.js backend |
+| **CLI client** | https://github.com/librespeed/speedtest-cli (Go binary) |
+| **Stars** | 12,000+ |
+
+**Features:** Download speed, upload speed, ping, jitter. Self-hostable. No Flash/Java. Docker image available. Result telemetry and sharing built-in.
+
+**Integration:** Self-host on Mixiee infrastructure. Use Go CLI for headless testing. Reports: download (Mbps), upload (Mbps), ping (ms), jitter (ms).
+
+---
+
+### 7.6 ctsTraffic — Network Reliability & Data Integrity
 
 | Attribute | Detail |
 |-----------|--------|
@@ -568,114 +803,150 @@ sudo ethr -x <target> -p icmp -t mtr -d 0
 | **License** | MIT |
 | **Language** | C++ |
 | **Platforms** | Windows 10+ |
-| **What it measures** | Good-put (application-level throughput), connection reliability, data integrity, connection establishment rate |
 
-**Why it's good for Mixiee:**
-- Measures "good-put" — what apps actually experience (vs raw throughput)
-- Tracks reliability: connection errors, data corruption, protocol errors
-- Validates data integrity across connections
-- CSV output for analysis
-- Great for showing that tuning doesn't sacrifice reliability for speed
+**Unique value:** Validates data integrity — every buffer received is verified against a known bit pattern. Catches data corruption from aggressive NIC tuning. Measures good-put (app-visible throughput) vs raw wire speed.
 
-### 6.5 LibreSpeed (Self-Hosted Speed Test)
+**Mixiee use case:** "Your NIC tuning increased speed by 15% with zero connection errors or data corruption" — a powerful trust statement for users worried about stability.
+
+---
+
+### 7.7 Network-Performance-Visualization — Before/After Reports
 
 | Attribute | Detail |
 |-----------|--------|
-| **Repository** | https://github.com/librespeed/speedtest |
-| **License** | LGPLv3 |
-| **Language** | JavaScript (frontend), PHP/Go/Rust (backend) |
-| **Platforms** | Any (web-based) |
-| **What it measures** | Download speed, upload speed, ping, jitter |
+| **Repository** | https://github.com/microsoft/Network-Performance-Visualization |
+| **License** | MIT |
+| **Language** | PowerShell |
+| **Platforms** | Windows (PowerShell 5.1+) |
 
-**Why it's good for Mixiee:**
-- ⭐ **BEST FOR USER-FACING INTERNET SPEED TESTS** ⭐
-- No Flash, no Java — pure JavaScript with XMLHttpRequest and Web Workers
-- Self-hostable — Mixiee can run its own speed test servers
-- Mobile-friendly
-- Telemetry support for storing results
-- Result sharing feature
-- Multiple Points of Test support
-
-**Integration approach:**
-- Host LibreSpeed servers (or use existing infrastructure)
-- Embed the speed test UI within Mixiee's interface
-- Or use the CLI client (`librespeed/speedtest-cli`) for headless testing
-- .NET client library available: `LibreSpeed.NET` (NuGet package)
-- Compare download/upload/ping/jitter before and after network tuning
+Takes raw output from ntttcp, Latte, and ctsTraffic and generates Excel charts with side-by-side before/after comparison tables, latency histograms, and throughput quartile charts. The visualization approach is an excellent model for Mixiee's results UI design.
 
 ---
 
-## 7. Latency Benchmarking (System / DPC / Input)
+## 8. System Latency Benchmarking (DPC / ISR / Scheduling)
 
-### 7.1 PresentMon — Input-to-Display Latency
+### 8.1 Windows ETW — Build Your Own DPC/ISR Latency Checker
 
-(See Section 4.3 above for details)
+ETW (Event Tracing for Windows) is what LatencyMon uses internally. You can build equivalent functionality.
 
-**For latency specifically, PresentMon measures:**
-- **CPU Frame Time** — time CPU spends preparing each frame
-- **GPU Frame Time** — time GPU spends rendering each frame
-- **Display Latency** — total time from CPU start to pixel on screen
-- **Input Latency** — time from input event to pixel response
-- **Frame Pacing** — consistency of frame delivery (jitter)
+**Key ETW kernel providers for latency:**
 
-### 7.2 Windows Performance Counters / ETW (Event Tracing for Windows)
+| Provider Flag | Captures |
+|--------------|---------|
+| KernelTraceEventParser.Keywords.Interrupt | ISR timing (which driver, how long) |
+| KernelTraceEventParser.Keywords.DPC | DPC timing (which driver, how long) |
+| KernelTraceEventParser.Keywords.Dispatcher | Thread ready time, scheduling latency |
+| KernelTraceEventParser.Keywords.ContextSwitch | Context switch events |
 
-**Not a single tool, but a Windows platform capability.**
+**Implementation using TraceEvent NuGet package (MIT license):**
+```csharp
+using (var session = new TraceEventSession("MixieeDPCSession")) {
+    session.EnableKernelProvider(
+        KernelTraceEventParser.Keywords.Interrupt |
+        KernelTraceEventParser.Keywords.DPC |
+        KernelTraceEventParser.Keywords.Dispatcher
+    );
 
-| What to measure | ETW Provider / Counter |
-|-----------------|----------------------|
-| **DPC Latency** | `Microsoft-Windows-Kernel-Processor-Power`, `DPC` events |
-| **ISR Latency** | Interrupt Service Routine timing via ETW |
-| **Context Switch** | `Microsoft-Windows-Kernel-Process` |
-| **Timer Resolution** | `NtQueryTimerResolution` API |
-| **Scheduling Latency** | `Microsoft-Windows-Kernel-Dispatcher` |
+    session.Source.Kernel.DpcStop += data => {
+        RecordDpcLatency(data.ElapsedTimeMSec * 1000); // convert to microseconds
+    };
 
-**Integration approach:**
-- Use Windows ETW APIs to capture DPC/ISR latency data
-- This is what LatencyMon (closed source) does internally
-- Build your own DPC latency checker using ETW traces
-- Show users: "Your DPC latency dropped from 500μs to 80μs after tuning"
+    session.Source.Kernel.ISRStop += data => {
+        RecordIsrLatency(data.RoutineName, data.ElapsedTimeMSec * 1000);
+    };
 
-**Key Windows APIs:**
-```cpp
-// Timer resolution
-NtQueryTimerResolution(&MinResolution, &MaxResolution, &CurrentResolution);
-
-// CPU performance counters
-QueryPerformanceCounter(&counter);
-QueryPerformanceFrequency(&frequency);
-
-// ETW Tracing
-StartTrace(...);
-EnableTraceEx2(...);
+    Task.Delay(10000).ContinueWith(_ => session.Stop());
+    session.Source.Process();
+}
 ```
 
-### 7.3 Custom Latency Benchmarks to Build
+**What to report:**
+- Average DPC latency (us)
+- Maximum DPC latency (us) — the LatencyMon headline number
+- Top 5 highest-latency drivers
+- ISR max latency and which driver caused it
 
-For a tuning utility, these custom latency measurements would be extremely valuable:
-
-1. **Timer Resolution Test**
-   - Measure current system timer resolution (default 15.6ms vs 0.5ms)
-   - Show impact of timer resolution tuning
-
-2. **Thread Scheduling Latency Test**
-   - Create a high-priority thread, sleep for 1ms, measure actual wake time
-   - Shows impact of CPU affinity, power plan, and scheduler tuning
-
-3. **I/O Completion Latency Test**
-   - Perform small I/O operations and measure completion time
-   - Shows impact of I/O priority and disk tuning
-
-4. **Memory Latency Test**
-   - Random pointer-chasing benchmark
-   - Shows impact of NUMA tuning and memory configuration
-   - Consider using **tinymembench** (https://github.com/ssvb/tinymembench) — MIT license
+**Before/after tuning example:**
+- Before: avg DPC 890us, max DPC 14,200us (bad driver)
+- After (driver update + affinity): avg DPC 72us, max DPC 380us
 
 ---
 
-## 8. Hardware Monitoring & Telemetry
+### 8.2 Windows Timer Resolution Test
 
-### 8.1 LibreHardwareMonitor
+Timer resolution is one of the most impactful system latency tuning targets:
+
+```csharp
+[DllImport("ntdll.dll")]
+static extern int NtQueryTimerResolution(
+    out int MinimumResolution,
+    out int MaximumResolution,
+    out int CurrentResolution);  // Values in 100-nanosecond units
+
+NtQueryTimerResolution(out int min, out int max, out int current);
+// Default Windows: current = 156001 = 15.6ms
+// After tuning: current = 5000 = 0.5ms
+// Best possible: current = 1000 = 0.1ms (requires HPET + bcdedit)
+
+// Sleep accuracy test
+var sw = Stopwatch.StartNew();
+Thread.Sleep(1);
+var actual = sw.Elapsed.TotalMilliseconds;
+// Power Saver: ~15.6ms  |  After tuning: ~1.0ms  |  Best: ~0.5ms
+```
+
+---
+
+### 8.3 Thread Scheduling Latency Test (Custom)
+
+Demonstrates the impact of power plan, CPU affinity, and priority changes:
+
+```csharp
+Thread.CurrentThread.Priority = ThreadPriority.Highest;
+Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+
+var sw = Stopwatch.StartNew();
+var overshoots = new List<long>();
+
+for (int i = 0; i < 1000; i++) {
+    var target = sw.ElapsedTicks + (Stopwatch.Frequency / 1000); // 1ms target
+    while (sw.ElapsedTicks < target) { /* spin wait */ }
+    Thread.Sleep(1);
+    long overshoot = (sw.ElapsedTicks - target) * 1_000_000 / Stopwatch.Frequency;
+    overshoots.Add(overshoot); // microseconds late
+}
+
+// Power Saver profile: avg 2500us, p99 15000us
+// High Performance + timer res: avg 200us, p99 500us
+```
+
+---
+
+### 8.4 System Informer (formerly Process Hacker) — Windows Kernel Monitoring
+
+| Attribute | Detail |
+|-----------|--------|
+| **Repository** | https://github.com/winsiderss/systeminformer |
+| **License** | MIT |
+| **Language** | C (Windows kernel driver + user-mode) |
+| **Platforms** | Windows 10+ (32/64-bit) |
+| **Stars** | 10,000+ |
+
+**What it provides:**
+- Per-driver DPC and ISR timing breakdown
+- Real-time interrupt statistics with driver attribution
+- GPU, CPU, disk, network activity at process/thread level
+- Kernel-mode thread stack traces
+- Named pipe and shared memory API for programmatic access
+- Plugin architecture for extending functionality
+
+**For Mixiee:** Read DPC/ISR timing in real-time alongside benchmarks, attributing latency to specific drivers. Show: "Driver X was causing 89% of your DPC latency — after updating, latency dropped by 94%."
+
+---
+
+## 9. Hardware Monitoring & Telemetry
+
+### 9.1 LibreHardwareMonitor — Primary Monitoring Library
 
 | Attribute | Detail |
 |-----------|--------|
@@ -683,58 +954,66 @@ For a tuning utility, these custom latency measurements would be extremely valua
 | **License** | MPL 2.0 |
 | **Language** | C# (.NET) |
 | **Platforms** | Windows |
-| **NuGet** | `LibreHardwareMonitorLib` |
+| **NuGet** | LibreHardwareMonitorLib |
+| **Stars** | 5,000+ |
 
-**What it monitors:**
-- CPU: temperature, load %, clock speed, power consumption, voltage
-- GPU: temperature, load %, clock speed, VRAM usage, fan speed, power
-- RAM: usage, clock speed
-- Storage: temperature, health (S.M.A.R.T.), read/write activity
-- Motherboard: voltages, fan speeds
-- Network: bandwidth usage
+**Hardware and sensors available:**
 
-**Why it's critical for Mixiee:**
-- ⭐ **ESSENTIAL FOR MONITORING DURING BENCHMARKS** ⭐
-- Shows CPU/GPU temperature and throttling during tests
-- Verifies that tuning doesn't cause thermal issues
-- Can display real-time metrics alongside benchmark scores
-- Available as a NuGet library — easy to integrate into .NET apps
-- Supports Intel, AMD, NVIDIA hardware
+| Hardware | Available Sensors |
+|----------|-----------------|
+| CPU | Temp per core, package temp, per-core clock, package power (W), core voltage, C-state residency |
+| GPU (Intel/AMD/NVIDIA) | GPU temp, hotspot, junction temp, GPU clock, VRAM clock, GPU load %, VRAM usage, fan RPM, GPU power (W) |
+| RAM | Frequency, voltage (limited support) |
+| Storage | Drive temp, S.M.A.R.T. (read errors, reallocated sectors, total TB written, power-on hours) |
+| Motherboard | VRM temps, system temp, fan speeds, voltage rails (12V, 5V, 3.3V) |
+| Network | Current and total RX/TX bandwidth |
 
-**Integration code sample:**
+**Integration code:**
 ```csharp
-using LibreHardwareMonitor.Hardware;
-
-var computer = new Computer
-{
-    IsCpuEnabled = true,
-    IsGpuEnabled = true,
-    IsMemoryEnabled = true,
-    IsStorageEnabled = true,
-    IsNetworkEnabled = true
+var computer = new Computer {
+    IsCpuEnabled = true, IsGpuEnabled = true,
+    IsMemoryEnabled = true, IsStorageEnabled = true
 };
-
 computer.Open();
 computer.Accept(new UpdateVisitor());
 
-foreach (var hardware in computer.Hardware)
-{
-    foreach (var sensor in hardware.Sensors)
-    {
-        Console.WriteLine($"{sensor.Name}: {sensor.Value} ({sensor.SensorType})");
+foreach (var hw in computer.Hardware) {
+    hw.Update();
+    foreach (var s in hw.Sensors) {
+        if (s.SensorType == SensorType.Temperature)
+            Console.WriteLine($"{hw.Name} {s.Name}: {s.Value:F1} C");
+        if (s.SensorType == SensorType.Power)
+            Console.WriteLine($"{hw.Name} {s.Name}: {s.Value:F1} W");
     }
 }
 ```
 
-**Integration approach:**
-- Run LibreHardwareMonitor in parallel with benchmarks
-- Log CPU/GPU temperatures, clocks, and power during each test
-- Flag if thermal throttling occurred (invalidates benchmark result)
-- Show "system health" metrics alongside performance scores
+**Critical use in benchmarking:**
+- Detect thermal throttling mid-benchmark and flag result as "thermally limited — not representative"
+- Log CPU/GPU temps throughout test — show thermal headroom
+- Show GPU power reduction after undervolting alongside performance numbers
 
 ---
 
-## 9. Cross-Cutting: Phoronix Test Suite (Meta-Framework)
+### 9.2 Intel PCM — For Intel CPU Hardware Counter Monitoring During Benchmarks
+
+(Full details in Section 3.6)
+
+Run `pcm-sensor-server -port 9738` as a background service and poll JSON during benchmark runs to collect IPC, L2/L3 cache miss rates, per-DRAM-channel bandwidth, CPU package and DRAM power in Watts, and thermal headroom.
+
+---
+
+### 9.3 System Informer — Alternative Windows Monitor
+
+(Full details in Section 8.4)
+
+Exposes CPU, GPU, disk, network, memory metrics via shared memory and named pipes. MIT license. Alternative to LibreHardwareMonitor for Windows-specific monitoring with deeper kernel insight.
+
+---
+
+## 10. Cross-Cutting Meta-Frameworks
+
+### 10.1 Phoronix Test Suite — 600+ Test Benchmark Framework
 
 | Attribute | Detail |
 |-----------|--------|
@@ -743,279 +1022,381 @@ foreach (var hardware in computer.Hardware)
 | **Language** | PHP (CLI) |
 | **Platforms** | Linux, Windows, macOS, BSD |
 | **Test profiles** | 600+ individual tests, 200+ suites |
-| **Website** | https://www.openbenchmarking.org/ |
+| **Result database** | https://www.openbenchmarking.org/ |
 
-**Why it's good for Mixiee:**
-- The most comprehensive benchmarking meta-framework available
-- 600+ test profiles covering CPU, GPU, disk, memory, network, and more
-- Automated test installation, execution, and result reporting
-- Built-in result comparison and sharing via OpenBenchmarking.org
-- Can serve as a reference for which tests to implement
-- Automates the download and execution of tools like fio, iperf3, etc.
+**Key test profiles to reference for Mixiee parameters:**
 
-**Integration approach:**
-- Don't embed PTS directly (it's PHP-based and heavy)
-- Instead, study its test profiles to understand which tools and parameters are most effective
-- Use OpenBenchmarking.org results as baseline comparisons
-- Consider submitting Mixiee results to OpenBenchmarking.org for community comparison
+| PTS Profile | Tool it runs | Benchmark type |
+|-------------|-------------|----------------|
+| compress-7zip | 7-Zip | CPU compression (MIPS) |
+| openssl | OpenSSL | CPU crypto (AES/RSA MB/s) |
+| sysbench | sysbench | CPU integer/float |
+| ramspeed-smp | RAMspeed | Memory bandwidth |
+| stream | STREAM | Memory BW (Triad/Copy/Add/Scale) |
+| tinymembench | tinymembench | Memory BW + random latency |
+| fio | fio | Disk I/O with standard params |
+| iperf | iperf3 | Network bandwidth |
+| glmark2 | glmark2 | OpenGL rendering score |
+| stress-ng | stress-ng | CPU/memory targeted stress |
+| lmbench | lmbench | Latency micro-benchmarks |
+
+**How to use PTS for Mixiee without distributing it:**
+1. Study profiles: PHP files document exact tool parameters — invaluable for getting industry-standard settings right
+2. OpenBenchmarking.org baseline: Use community results to build normalization curves for scoring
+3. Result comparison: Allow users to export Mixiee results in PTS-compatible format for community comparison
+4. Test discovery: Find niche benchmarks you might not know about (600+ available)
+
+---
+## 11. Full Tool Comparison Matrix
+
+### CPU Tools
+
+| Tool | License | Windows Native | Quick Test | JSON Output | Custom Workloads | Recommended Use |
+|------|---------|---------------|-----------|------------|-----------------|----------------|
+| sysbench | GPLv2 | Binary | 5s | Parseable text | No | Integer throughput |
+| stress-ng | GPLv2+ | WSL only | 1s | No | Partial | Targeted workloads |
+| BenchmarkDotNet | MIT | Yes | No (slow) | Yes | Yes | .NET custom benchmarks |
+| Google Benchmark | Apache 2.0 | Yes | Yes | Yes | Yes | C++ custom benchmarks |
+| OpenSSL speed | Apache 2.0 | Yes | 3s | Parseable | No | Crypto throughput |
+| Intel PCM | BSD | Yes | Always-on | JSON HTTP | No | Intel hardware counters |
+| lmbench | GPLv2 | No (Linux) | No | No | No | Latency micro-suite |
+| UnixBench | GPLv2 | No (Linux) | No | No | No | Composite system score |
+
+### Memory Tools
+
+| Tool | License | Windows | Quick Test | What it measures | Recommended |
+|------|---------|---------|-----------|-----------------|------------|
+| STREAM | Custom | Compile | 5s | Sustained BW (Triad, Copy, Add, Scale) | Primary |
+| tinymembench | MIT | MinGW | 10s | Peak BW + random access latency | Primary |
+| lmbench lat_mem_rd | GPLv2 | No | 30s | Cache hierarchy latency curve | Linux |
+| Intel PCM pcm-memory | BSD | Yes | Always-on | Per-channel BW, NUMA analysis | Intel CPUs |
+
+### GPU Tools
+
+| Tool | License | Windows | GPU Support | Primary Use |
+|------|---------|---------|------------|------------|
+| vkpeak | MIT | Yes | All (Vulkan) | Compute GFLOPS + VRAM/PCIe BW |
+| PresentMon | MIT | Yes | All (DX/VK/GL) | Frame time + input latency + GPU telemetry |
+| glmark2 | GPLv3 | No | All (OpenGL) | Rendering score (Linux) |
+| GPUPerfAPI | MIT | Yes | AMD only | AMD hardware counters per drawcall |
+| Radeon GPU Profiler | MIT | Yes | AMD only | AMD GPU thread-level profiling |
+
+### Disk Tools
+
+| Tool | License | Windows | Output Format | Per-Core CPU Report | Recommended |
+|------|---------|---------|--------------|--------------------|-----------| 
+| DiskSpd | MIT | Yes (native) | XML | Yes (unique!) | Primary on Windows |
+| fio | GPLv2 | Installer | JSON | No | Primary on Linux; also Windows |
+
+### Network Tools
+
+| Tool | License | Windows | Latency Precision | All-in-One | Recommended Use |
+|------|---------|---------|------------------|-----------|----------------|
+| Ethr | MIT | Yes | Microseconds | Yes | Primary — all network tests |
+| Latte | MIT | Yes | Nanoseconds | No (latency only) | Latency specialist |
+| iperf3 | BSD | Community | Milliseconds | No | Bandwidth supplementary |
+| ntttcp | MIT | Yes | No | No | Windows-native throughput |
+| LibreSpeed | LGPLv3 | Web | Milliseconds | Internet only | User-facing internet speed |
+| ctsTraffic | MIT | Yes | No | No | Data integrity validation |
+| Network-Performance-Visualization | MIT | Yes | — | No | Post-processing and visualization |
+
+### Monitoring Tools
+
+| Tool | License | Windows | CPU | GPU | RAM | Disk | Network | DPC/ISR | Recommended |
+|------|---------|---------|-----|-----|-----|------|---------|---------|------------|
+| LibreHardwareMonitor | MPL 2.0 | Yes | Yes | Yes | Yes | Yes | Yes | No | Primary |
+| Intel PCM | BSD | Yes | Yes (Intel) | No | Yes | No | No | No | Intel deep counters |
+| System Informer | MIT | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Alternative + DPC |
 
 ---
 
-## 10. Comparison Matrix
+## 12. Recommended Implementation Stack
 
-### CPU Benchmarking Tools
+### Phase 1 — MVP
 
-| Tool | License | Windows Native | Resource Usage | Output Format | Accuracy | Recommendation |
-|------|---------|---------------|----------------|---------------|----------|---------------|
-| sysbench | GPLv2 | Via WSL | Very Low | JSON | High | ✅ Primary (Linux) |
-| stress-ng | GPLv2+ | Via WSL | Configurable | Text | High | ✅ Supplementary |
-| UnixBench | GPLv2 | No | Moderate | Text | Medium | Optional |
-| Google Benchmark | Apache 2.0 | ✅ | Very Low | JSON/CSV | Very High | ✅ Custom tests |
+| Category | Tool(s) | Key metrics | Test duration |
+|----------|---------|------------|--------------|
+| CPU Single-Core | sysbench (1 thread) | Events/sec, p95 latency | 10s |
+| CPU Multi-Core | sysbench (all threads) | Events/sec, speedup ratio | 10s |
+| CPU Crypto | openssl speed (AES + SHA256) | MB/s per cipher | 6s |
+| Memory Bandwidth | STREAM Triad | GB/s | 5s |
+| Memory Latency | tinymembench random read | nanoseconds | 10s |
+| GPU Compute | vkpeak fp32-vec4 | GFLOPS | 5s |
+| GPU Memory BW | vkpeak copy-d2d + copy-h2d | GBPS | 5s |
+| Disk Sequential | DiskSpd / fio seq read+write | MB/s | 30s |
+| Disk Random 4K | DiskSpd / fio rand read+write | IOPS + p99 latency | 30s |
+| Network Latency | Latte loopback TCP | us (p50, p99) | 10s |
+| System Latency | Custom ETW DPC + timer res test | us | 10s |
+| Monitoring | LibreHardwareMonitor | Temp, clock, power | Always-on |
+| **Total (Quick mode)** | | | **~2.5 minutes** |
 
-### GPU Benchmarking Tools
+### Phase 2 — Full Suite (Target: 3 months)
 
-| Tool | License | Windows Native | GPU Support | Resource Usage | Recommendation |
-|------|---------|---------------|-------------|----------------|---------------|
-| vkpeak | MIT | ✅ | All (Vulkan) | Very Low | ⭐ Primary |
-| GPUPerfAPI | MIT | ✅ | AMD only | Low | Supplementary (AMD) |
-| PresentMon | MIT | ✅ | All | Low | ⭐ Primary (latency) |
-| MangoHud | MIT | Linux only | All | Low | Linux only |
+| Addition | Why it matters |
+|----------|---------------|
+| Intel PCM integration | Shows memory channel BW, DRAM latency, IPC changes for Intel CPUs |
+| PresentMon frame capture | Frame time, input latency, GPU telemetry — proves gaming impact |
+| Ethr network bandwidth | Full NIC throughput with latency measurement |
+| LibreSpeed internet test | User-visible ISP speed before/after network tuning |
+| stress-ng targeted tests | Validates power plan and scheduler tuning with specific workloads |
+| lmbench lat_ctx | Context switch latency — shows scheduler improvements |
+| STREAM multi-threaded | OpenMP STREAM for NUMA/memory channel efficiency |
 
-### Disk Benchmarking Tools
+### Phase 3 — Competitive Differentiator (Target: 6+ months)
 
-| Tool | License | Windows Native | Output Format | Accuracy | Recommendation |
-|------|---------|---------------|---------------|----------|---------------|
-| DiskSpd | MIT | ✅ | XML/Text | Very High | ⭐ Primary (Windows) |
-| fio | GPLv2 | Via installer | JSON | Very High | ⭐ Primary (cross-platform) |
-
-### Network Benchmarking Tools
-
-| Tool | License | Windows Native | Features | Recommendation |
-|------|---------|---------------|----------|---------------|
-| Ethr | MIT | ✅ | All-in-one | ⭐ Primary |
-| iperf3 | BSD | Community builds | Bandwidth focus | ✅ Supplementary |
-| ntttcp | MIT | ✅ | Throughput only | Optional |
-| ctsTraffic | MIT | ✅ | Reliability focus | Optional |
-| LibreSpeed | LGPLv3 | Web-based | User-facing | ⭐ Internet speed |
-
----
-
-## 11. Recommended Implementation Stack
-
-### Phase 1 — MVP (Minimum Viable Product)
-
-Build these first for a solid foundation:
-
-| Category | Primary Tool | Why |
-|----------|-------------|-----|
-| **CPU** | Custom C++ benchmarks (Google Benchmark lib) + sysbench | Full control + proven standard |
-| **GPU** | vkpeak | Cross-vendor, lightweight, MIT license |
-| **Disk** | DiskSpd (Windows) / fio (cross-platform) | Industry standards, best accuracy |
-| **Network** | Ethr | All-in-one, MIT, native Windows |
-| **Latency** | PresentMon (frame/input latency) + custom ETW (DPC/ISR) | Complete latency picture |
-| **Monitoring** | LibreHardwareMonitor | Temperature/throttle detection |
-
-### Phase 2 — Enhanced
-
-| Addition | Purpose |
-|----------|---------|
-| LibreSpeed integration | User-facing internet speed test |
-| stress-ng CPU stressors | Targeted CPU feature testing |
-| GPUPerfAPI (AMD) / NVAPI (NVIDIA) | Deep GPU hardware counter data |
-| ctsTraffic | Network reliability validation |
-| Custom DPC latency checker | System latency measurement |
-| tinymembench | Memory bandwidth/latency |
-
-### Phase 3 — Competitive Differentiator
-
-| Addition | Purpose |
-|----------|---------|
-| Automated before/after workflow | One-click "Run tuning + benchmark" |
-| Historical tracking & charts | Show performance trends over time |
-| Community comparison | Compare scores against other users |
-| OpenBenchmarking.org integration | Cross-reference with industry results |
-| AI-powered analysis | "Your disk IOPS improved by 40% — here's why" |
+| Feature | Tools needed |
+|---------|-------------|
+| GPU frame pipeline visualization | PresentMon SDK + lightweight DirectX/Vulkan test scene |
+| AI-generated tuning insights | LLM analysis of before/after benchmark deltas |
+| Community score leaderboard | Own API or OpenBenchmarking.org integration |
+| Network reliability validation | ctsTraffic + Network-Performance-Visualization |
+| Per-driver DPC attribution | ETW + System Informer API |
+| AMD GPU deep profiling | GPUPerfAPI + Radeon GPU Profiler |
+| Memory sub-timing analysis | STREAM + tinymembench + lmbench combined |
+| Automated regression testing | Phoromatic-inspired scheduled benchmarks |
 
 ---
 
-## 12. Before/After Tuning — Scoring Strategy
+## 13. Before/After Tuning — Scoring Strategy
 
-### Composite Score Architecture
-
-```
-Mixiee Score = (CPU_Score × 0.25) + (GPU_Score × 0.25) + (Disk_Score × 0.20)
-             + (Network_Score × 0.15) + (Latency_Score × 0.15)
-```
-
-### Individual Scores
-
-**CPU Score (0-100):**
-```
-Components:
-- Single-thread performance (sysbench events/sec, 1 thread) × 0.4
-- Multi-thread performance (sysbench events/sec, all threads) × 0.4
-- Scheduling latency (custom test) × 0.2
-
-Normalization: Score against a reference machine (e.g., Ryzen 5 5600X = 50)
-```
-
-**GPU Score (0-100):**
-```
-Components:
-- FP32 compute (vkpeak fp32-vec4 GFLOPS) × 0.3
-- Memory bandwidth (vkpeak copy-d2d GBPS) × 0.2
-- Frame time consistency (PresentMon 1% low / avg ratio) × 0.25
-- Input latency (PresentMon input latency ms) × 0.25
-
-Normalization: Score against reference (e.g., RTX 3060 = 50)
-```
-
-**Disk Score (0-100):**
-```
-Components:
-- Sequential Read MB/s × 0.2
-- Sequential Write MB/s × 0.2
-- 4K Random Read IOPS × 0.25
-- 4K Random Write IOPS × 0.20
-- Read latency p99 (inverse) × 0.15
-
-Normalization: Score against reference (e.g., Samsung 970 EVO Plus = 50)
-```
-
-**Network Score (0-100):**
-```
-Components:
-- Bandwidth (Ethr TCP throughput) × 0.35
-- Connection latency (Ethr TCP connection setup) × 0.25
-- Packet throughput (Ethr packets/sec) × 0.20
-- Jitter (LibreSpeed or Ethr) × 0.20
-```
-
-**Latency Score (0-100):**
-```
-Components:
-- DPC latency average (ETW custom, inverse) × 0.30
-- Timer resolution accuracy (custom, inverse) × 0.25
-- Thread scheduling latency (custom, inverse) × 0.25
-- I/O completion latency (custom, inverse) × 0.20
-```
-
-### Before/After Display
+### Composite Score Formula
 
 ```
-┌──────────────────────────────────────────┐
-│          MIXIEE BENCHMARK RESULTS         │
-├──────────────────────────────────────────┤
-│  Component    Before    After    Δ        │
-│  ─────────    ──────    ─────    ──       │
-│  CPU          62        71       +14.5%   │
-│  GPU          55        58       +5.5%    │
-│  Disk         48        67       +39.6%   │
-│  Network      70        74       +5.7%    │
-│  Latency      35        78       +122.9%  │
-│  ─────────    ──────    ─────    ──       │
-│  OVERALL      54        70       +29.6%   │
-│                                           │
-│  🌡️ Max CPU Temp: 72°C (safe)            │
-│  🌡️ Max GPU Temp: 65°C (safe)            │
-│  ⚠️ No thermal throttling detected        │
-└──────────────────────────────────────────┘
+MIXIEE SCORE =
+  CPU_Score    * 0.22 +
+  Memory_Score * 0.12 +
+  GPU_Score    * 0.22 +
+  Disk_Score   * 0.18 +
+  Network_Score * 0.12 +
+  Latency_Score * 0.14
+```
+
+### Individual Score Formulas (all normalized to 0-100, reference machine = 50.0)
+
+**CPU Score:**
+```
+= (sysbench 1-thread eps  / ref_1thread  * 40)
++ (sysbench N-thread eps  / ref_Nthread  * 35)
++ (openssl AES128 MB/s    / ref_aes      * 15)
++ (openssl SHA256 MB/s    / ref_sha      * 10)
+
+Reference: AMD Ryzen 5 5600X at stock = 50.0
+```
+
+**Memory Score:**
+```
+= (STREAM Triad GB/s       / ref_triad   * 50)
++ (100 / tinymembench ns                 * 30)    [inverse: lower latency = higher score]
++ (100 / PCM DRAM latency ns             * 20)    [Intel only, else distribute to others]
+
+Reference: DDR4-3200 CL16 dual-channel = 50.0
+```
+
+**GPU Score:**
+```
+= (vkpeak fp32vec4 GFLOPS  / ref_fp32   * 40)
++ (vkpeak copy-d2d GBPS    / ref_vram   * 25)
++ (vkpeak copy-h2d GBPS    / ref_pcie   * 10)
++ (PresentMon 1% low FPS   / ref_1pct   * 15)    [if available]
++ (100 / PresentMon avg input latency    * 10)    [if available]
+
+Reference: NVIDIA RTX 3060 at stock = 50.0
+```
+
+**Disk Score:**
+```
+= (seq read MB/s    / ref_seqread   * 20)
++ (seq write MB/s   / ref_seqwrite  * 20)
++ (4K read IOPS     / ref_4kread    * 25)
++ (4K write IOPS    / ref_4kwrite   * 20)
++ (100 / p99 latency ms              * 15)
+
+Reference: Samsung 970 EVO Plus NVMe = 50.0
+```
+
+**Network Score:**
+```
+= (Ethr TCP bandwidth Mbps / ref_bw     * 35)
++ (100 / Latte p50 latency us           * 35)
++ (LibreSpeed download Mbps / ref_dl    * 15)
++ (100 / LibreSpeed jitter ms           * 15)
+```
+
+**Latency Score:**
+```
+= (timer resolution accuracy score      * 30)    [15.6ms=0, 0.5ms=100]
++ (100 / thread scheduling p99 us       * 30)
++ (100 / DPC average latency us         * 25)
++ (100 / ISR max latency us             * 15)
+```
+
+### Result Display Format
+
+```
++================================================================+
+|              MIXIEE — TUNING IMPACT REPORT                      |
++================================================================+
+|  Component          Before    After      Delta    Delta %       |
+|  CPU (22%)            54.2     61.8       +7.6     +14.0%       |
+|  Memory (12%)         48.1     67.3      +19.2     +39.9%       |
+|  GPU (22%)            55.0     57.2       +2.2      +4.0%       |
+|  Disk (18%)           43.7     71.2      +27.5     +62.9%       |
+|  Network (12%)        68.4     73.1       +4.7      +6.9%       |
+|  Latency (14%)        32.1     79.4      +47.3    +147.4%       |
+|  OVERALL              51.8     67.9      +16.1     +31.1%       |
++================================================================+
+|  Key Metric Changes:                                             |
+|   Disk IOPS:        45,000 -> 147,000    (+226.7%)              |
+|   Timer Resolution:   15.6ms -> 0.5ms    (-96.8%)              |
+|   Memory Bandwidth: 38.4 -> 52.1 GB/s   (+35.7%)              |
+|   DPC Latency:        890us -> 72us      (-91.9%)              |
+|   Network Latency:     87us -> 24us      (-72.4%)              |
++================================================================+
+|  Thermals: CPU max 74C  GPU max 67C  (both within safe range)   |
+|  No thermal throttling detected during any benchmark             |
+|  No data integrity errors (ctsTraffic validation passed)         |
++================================================================+
 ```
 
 ---
 
-## 13. Resource Consumption Guidelines
+## 14. Resource Consumption Guidelines
 
-### Design Goals
+### Test Mode Budgets
 
-- **Quick Test:** < 2 minutes total, minimal disk space, < 200MB RAM
-- **Standard Test:** < 10 minutes total, < 2GB temporary disk space, < 500MB RAM
-- **Thorough Test:** < 30 minutes total, < 5GB temporary disk space, < 1GB RAM
+| Mode | Duration | Temp disk | RAM overhead | Notes |
+|------|---------|-----------|-------------|-------|
+| Quick | ~2.5 min | ~2 GB | < 200 MB | Skip GPU frame capture, internet test |
+| Standard | ~8 min | ~5 GB | < 400 MB | All categories, medium duration |
+| Thorough | ~25 min | ~10 GB | < 800 MB | Full duration, GPU frame capture |
 
-### Per-Component Budget
+### Per-Test Duration Table
 
-| Component | Quick (seconds) | Standard (seconds) | Thorough (seconds) |
-|-----------|----------------|--------------------|--------------------|
-| CPU | 10 | 30 | 120 |
-| GPU | 5 | 20 | 60 |
-| Disk | 15 | 60 | 300 |
-| Network | 10 | 30 | 120 |
-| Latency | 5 | 20 | 60 |
-| **Total** | **~45 sec** | **~3 min** | **~11 min** |
+| Test | Quick | Standard | Thorough |
+|------|-------|---------|---------|
+| CPU sysbench (2 passes) | 2x10s | 2x30s | 2x60s |
+| CPU Crypto (openssl) | 6s | 10s | 20s |
+| Memory (STREAM + tinymembench) | 10s | 20s | 40s |
+| GPU vkpeak (5 scenarios) | 15s | 30s | 60s |
+| GPU PresentMon frame capture | SKIP | 30s | 60s |
+| Disk (4 tests) | 4x15s | 4x30s | 4x60s |
+| Network Latte loopback | 10s | 20s | 30s |
+| Network Ethr bandwidth | SKIP | 15s | 30s |
+| Network LibreSpeed | SKIP | 15s | 30s |
+| System latency (ETW + timer) | 10s | 20s | 30s |
+| **Total** | **~2.5 min** | **~8 min** | **~25 min** |
 
-### Resource Cleanup
+### Resource Cleanup Rules
 
-- Delete temporary test files after disk benchmarks
-- Kill all spawned benchmark processes on completion or cancellation
-- Release GPU resources after vkpeak completes
-- Close ETW trace sessions
-
----
-
-## 14. Licensing Summary
-
-| Tool | License | Can embed in commercial app? | Must share source? |
-|------|---------|-----------------------------|--------------------|
-| vkpeak | MIT | ✅ Yes | No |
-| DiskSpd | MIT | ✅ Yes | No |
-| Ethr | MIT | ✅ Yes | No |
-| PresentMon | MIT | ✅ Yes | No |
-| GPUPerfAPI | MIT | ✅ Yes | No |
-| ntttcp | MIT | ✅ Yes | No |
-| ctsTraffic | MIT | ✅ Yes | No |
-| Google Benchmark | Apache 2.0 | ✅ Yes | No |
-| LibreHardwareMonitor | MPL 2.0 | ✅ Yes (with conditions) | Modified files only |
-| fio | GPLv2 | ⚠️ As separate process only | If linked/modified |
-| sysbench | GPLv2 | ⚠️ As separate process only | If linked/modified |
-| stress-ng | GPLv2+ | ⚠️ As separate process only | If linked/modified |
-| UnixBench | GPLv2 | ⚠️ As separate process only | If linked/modified |
-| LibreSpeed | LGPLv3 | ✅ Yes (with conditions) | Modified lib files |
-| Phoronix Test Suite | GPLv3 | ❌ Reference only | Yes |
-
-**Key licensing guidance:**
-- **MIT / Apache 2.0 tools** can be freely embedded, modified, and distributed
-- **GPLv2 tools** (fio, sysbench) should be invoked as **separate processes** (exec/spawn), not linked into your binary — this avoids GPL contamination
-- **MPL 2.0** (LibreHardwareMonitor) — you can use it as a library; if you modify its source files, only those modified files must be shared
-- **LGPLv3** (LibreSpeed) — can link to it; if you modify the library itself, share those changes
+1. **Disk tests:** Always delete temp test file after completion. Write to target drive, not system temp.
+2. **GPU tests:** vkpeak releases resources automatically. PresentMon Service cleans up with pmCloseSession().
+3. **Network tests:** Kill listener process after test. Never leave open sockets.
+4. **ETW sessions:** Always call StopTrace() even on error paths — orphaned sessions persist until reboot.
+5. **Thermal abort:** If LibreHardwareMonitor detects CPU > 95C or GPU > 90C, abort and mark result as "thermally limited."
 
 ---
 
-## 15. References & Links
+## 15. Licensing Summary
 
-### Repositories
+| Tool | License | Embed in commercial app? | Conditions |
+|------|---------|------------------------|------------|
+| vkpeak | MIT | YES | None |
+| DiskSpd | MIT | YES | None |
+| Ethr | MIT | YES | None |
+| Microsoft Latte | MIT | YES | None |
+| ntttcp | MIT | YES | None |
+| ctsTraffic | MIT | YES | None |
+| Network-Performance-Visualization | MIT | YES | None |
+| PresentMon | MIT | YES | None |
+| GPUPerfAPI | MIT | YES | None |
+| Radeon GPU Profiler | MIT | YES | None |
+| Google Benchmark | Apache 2.0 | YES | Attribution in documentation |
+| BenchmarkDotNet | MIT | YES | None |
+| Intel PCM | BSD 3-Clause | YES | Attribution |
+| tinymembench | MIT | YES | None |
+| System Informer | MIT | YES | None |
+| Intel ISA-L | BSD | YES | Attribution |
+| LibreHardwareMonitor | MPL 2.0 | YES (as library) | Modified source files must be shared |
+| LibreSpeed | LGPLv3 | YES (as library) | Modified library files must be shared |
+| OpenSSL speed tool | Apache 2.0 | YES | Attribution |
+| glmark2 | GPLv3 | SPAWN ONLY | Linking makes your app GPL |
+| STREAM | Custom | NO commercial redistribution | Ship source; compile at runtime |
+| fio | GPLv2 | SPAWN ONLY | Linking makes your app GPL |
+| sysbench | GPLv2 | SPAWN ONLY | Linking makes your app GPL |
+| stress-ng | GPLv2+ | SPAWN ONLY | Linking makes your app GPL |
+| UnixBench | GPLv2 | SPAWN ONLY | Linking makes your app GPL |
+| lmbench | GPLv2 | SPAWN ONLY | Linking makes your app GPL |
+| Phoronix Test Suite | GPLv3 | REFERENCE ONLY | For learning and inspiration |
 
-| Tool | URL |
-|------|-----|
-| sysbench | https://github.com/akopytov/sysbench |
-| stress-ng | https://github.com/ColinIanKing/stress-ng |
-| UnixBench | https://github.com/kdlucas/byte-unixbench |
-| Google Benchmark | https://github.com/google/benchmark |
-| vkpeak | https://github.com/nihui/vkpeak |
-| GPUPerfAPI | https://github.com/GPUOpen-Tools/gpu_performance_api |
-| PresentMon | https://github.com/GameTechDev/PresentMon |
-| MangoHud | https://github.com/flightlessmango/MangoHud |
-| Radeon GPU Profiler | https://github.com/GPUOpen-Tools/radeon_gpu_profiler |
-| fio | https://github.com/axboe/fio |
-| DiskSpd | https://github.com/microsoft/diskspd |
-| iperf3 | https://github.com/esnet/iperf |
-| Ethr | https://github.com/microsoft/ethr |
-| ntttcp | https://github.com/microsoft/ntttcp |
-| ctsTraffic | https://github.com/microsoft/ctsTraffic |
-| LibreSpeed | https://github.com/librespeed/speedtest |
-| LibreHardwareMonitor | https://github.com/LibreHardwareMonitor/LibreHardwareMonitor |
-| tinymembench | https://github.com/ssvb/tinymembench |
-| Phoronix Test Suite | https://github.com/phoronix-test-suite/phoronix-test-suite |
+### The Three Practical Rules
 
-### Documentation & Guides
+**Rule 1 — MIT / Apache 2.0 / BSD tools (15 tools):** Embed, link, modify, and redistribute freely in commercial products with zero open-source obligations beyond attribution.
 
-- fio documentation: https://fio.readthedocs.io/
-- DiskSpd wiki: https://github.com/microsoft/diskspd/wiki
-- iperf3 FAQ: https://software.es.net/iperf/faq.html
-- PresentMon usage: https://github.com/GameTechDev/PresentMon/blob/main/README-ConsoleApplication.md
-- ETW Tracing guide: https://learn.microsoft.com/en-us/windows/win32/etw/event-tracing-portal
-- Vulkan SDK: https://vulkan.lunarg.com/
-- OpenBenchmarking.org: https://www.openbenchmarking.org/
+**Rule 2 — GPLv2/v3 tools (fio, sysbench, stress-ng, lmbench, etc.):** Always invoke via Process.Start() or equivalent subprocess spawning. This has **no GPL contamination** of your host application. The GPL only triggers when you link the library into your code.
+
+**Rule 3 — STREAM:** Ship the single stream.c source file in your app and compile it at first run. The mathematical operations (Copy/Scale/Add/Triad) are not copyrightable — you can also implement them natively in Mixiee itself.
 
 ---
 
-*This document was prepared for the Mixiee development team. For questions or updates, refer to the repository issues or contact the benchmarking implementation lead.*
+## 16. References & Links
+
+### Tool Repositories
+
+| Tool | Repository | Stars |
+|------|-----------|-------|
+| sysbench | https://github.com/akopytov/sysbench | 6k+ |
+| stress-ng | https://github.com/ColinIanKing/stress-ng | 3k+ |
+| BenchmarkDotNet | https://github.com/dotnet/BenchmarkDotNet | 11k+ |
+| Google Benchmark | https://github.com/google/benchmark | 9k+ |
+| UnixBench | https://github.com/kdlucas/byte-unixbench | 1k+ |
+| OpenSSL | https://github.com/openssl/openssl | 26k+ |
+| Intel PCM | https://github.com/intel/pcm | 3k+ |
+| lmbench (Intel fork) | https://github.com/intel/lmbench | — |
+| STREAM (Jeff Hammond mirror) | https://github.com/jeffhammond/STREAM | — |
+| tinymembench | https://github.com/ssvb/tinymembench | — |
+| vkpeak | https://github.com/nihui/vkpeak | 1k+ |
+| PresentMon | https://github.com/GameTechDev/PresentMon | 3k+ |
+| GPUPerfAPI | https://github.com/GPUOpen-Tools/gpu_performance_api | — |
+| Radeon GPU Profiler | https://github.com/GPUOpen-Tools/radeon_gpu_profiler | — |
+| glmark2 | https://github.com/glmark2/glmark2 | — |
+| fio | https://github.com/axboe/fio | 5k+ |
+| DiskSpd | https://github.com/microsoft/diskspd | 2k+ |
+| iperf3 | https://github.com/esnet/iperf | 6k+ |
+| Ethr | https://github.com/microsoft/ethr | 2k+ |
+| Microsoft Latte | https://github.com/microsoft/latte | — |
+| ntttcp | https://github.com/microsoft/ntttcp | — |
+| ctsTraffic | https://github.com/microsoft/ctsTraffic | — |
+| Network-Performance-Visualization | https://github.com/microsoft/Network-Performance-Visualization | — |
+| LibreSpeed | https://github.com/librespeed/speedtest | 12k+ |
+| LibreSpeed CLI | https://github.com/librespeed/speedtest-cli | — |
+| LibreHardwareMonitor | https://github.com/LibreHardwareMonitor/LibreHardwareMonitor | 5k+ |
+| System Informer | https://github.com/winsiderss/systeminformer | 10k+ |
+| Intel ISA-L | https://github.com/intel/isa-l | 1k+ |
+| NVIDIA CUDA Samples | https://github.com/NVIDIA/cuda-samples | 5k+ |
+| Phoronix Test Suite | https://github.com/phoronix-test-suite/phoronix-test-suite | 2k+ |
+
+### Key Documentation
+
+| Resource | URL |
+|----------|-----|
+| fio documentation | https://fio.readthedocs.io/ |
+| DiskSpd wiki | https://github.com/microsoft/diskspd/wiki |
+| PresentMon Service README | https://github.com/GameTechDev/PresentMon/blob/main/README-Service.md |
+| PresentMon Console README | https://github.com/GameTechDev/PresentMon/blob/main/README-ConsoleApplication.md |
+| ETW Tracing (MSDN) | https://learn.microsoft.com/en-us/windows/win32/etw/event-tracing-portal |
+| TraceEvent NuGet (MIT) | https://www.nuget.org/packages/Microsoft.Diagnostics.Tracing.TraceEvent |
+| LibreHardwareMonitorLib NuGet | https://www.nuget.org/packages/LibreHardwareMonitorLib/ |
+| Vulkan SDK | https://vulkan.lunarg.com/ |
+| OpenBenchmarking.org | https://www.openbenchmarking.org/ |
+| STREAM canonical site | http://www.cs.virginia.edu/stream/ |
+| Intel PCM documentation | https://github.com/intel/pcm/tree/master/doc |
+| GPUOpen tools | https://gpuopen.com/tools/ |
+| lmbench research paper (1996) | https://www.usenix.org/publications/library/proceedings/usenix96/full_papers/mcvoy.a/ |
+| Microsoft Network Perf Visualization | https://github.com/microsoft/Network-Performance-Visualization |
+| NtQueryTimerResolution (MSDN) | https://learn.microsoft.com/en-us/windows/win32/api/winternl/ |
+
+---
+
+*Version 2.0 — Expanded Deep Research Edition — April 2026*
+*31 open-source tools evaluated across 6 benchmarking categories.*
+*Prepared for the Mixiee development team.*
